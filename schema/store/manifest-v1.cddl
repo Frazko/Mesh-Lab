@@ -1,0 +1,10 @@
+; LOCAL persistence format for F1 synthetic harness. Not A003 or interoperable mesh wire.
+manifest = [version: 1, origin: bstr .size 32, sequence: uint,
+            namespace: tstr .size (1..64), epoch: uint,
+            targets: [1*10 bstr .size 32], expires-at: uint,
+            hop-limit: 1..16, content-length: 1..65536,
+            chunk-hashes: [1*64 bstr .size 32]]
+; Definite containers + shortest CBOR integer/length encodings. Targets sorted/unique.
+; Sequence, epoch, expiry are positive and <= i64::MAX. Namespace is ASCII [A-Za-z0-9._-].
+; Chunks are 1024 bytes except the last; count = ceil(content-length / 1024).
+; Local ID = SHA256(UTF8("MeshLab/StoreManifest/v1") || 0x00 || canonical manifest).

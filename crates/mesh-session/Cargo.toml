@@ -1,0 +1,16 @@
+[package]
+name = "mesh-session"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+[lints]
+workspace = true
+[dependencies]
+mesh-crypto = { path = "../mesh-crypto" }
+mesh-protocol = { path = "../mesh-protocol" }
+mesh-codec = { path = "../mesh-codec" }
+mesh-types = { path = "../mesh-types" }
+snow = { version = "=0.10.0", default-features = false, features = ["default-resolver", "use-curve25519", "use-chacha20poly1305", "use-sha2"] }
+zeroize = "=1.8.2"
+[dev-dependencies]
+serde_json = "=1.0.149"

@@ -1,0 +1,2 @@
+; Redacted F0 diagnostic event: no location, message, audio or stable identity.
+bridge-event = [sequence: uint, request-id: uint, kind: 0]

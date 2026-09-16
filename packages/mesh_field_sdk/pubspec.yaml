@@ -1,0 +1,16 @@
+name: mesh_field_sdk
+description: Cross-product Flutter facade for nearby Mesh field sessions.
+version: 0.2.1
+publish_to: none
+environment:
+  sdk: ^3.13.2
+  flutter: '>=3.47.2'
+dependencies:
+  flutter:
+    sdk: flutter
+  mesh_host:
+    path: ../../platforms/mesh_host
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 6.0.0

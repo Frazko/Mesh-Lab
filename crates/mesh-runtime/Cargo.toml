@@ -1,0 +1,19 @@
+[package]
+name = "mesh-runtime"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mesh-types = { path = "../mesh-types" }
+mesh-object = { path = "../mesh-object" }
+zeroize = "=1.8.2"
+mesh-protocol = { path = "../mesh-protocol" }
+mesh-link = { path = "../mesh-link" }
+mesh-session = { path = "../mesh-session" }
+
+[dev-dependencies]
+mesh-crypto = { path = "../mesh-crypto", features = ["os-rng"] }

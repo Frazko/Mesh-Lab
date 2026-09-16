@@ -1,0 +1,10 @@
+; F0 ABI/API v1: local diagnostics only, never transmitted over radio.
+request = [version: 1, method: 0..2, argument: 0..9007199254740991]
+; method 0: argument MUST be 0; method 1: event cursor; method 2: positive request ID.
+info-response = [1, 0, [engine-version: tstr, abi: 1, api: 1, phase: "F0", build-id: tstr]]
+snapshot-response = [1, 1..2, [runtime-id: uint, cursor: uint, probe-count: uint,
+  state: 0, cursor-reset: bool, events: [*64 event]]]
+event = [sequence: uint, request-id: uint, kind: 0]
+; state 0 = foundationOnly; kind 0 = bridgeVerified. Neither claims radio readiness.
+; All counters bounded at 2^53-1, strings <= 128 UTF-8 bytes, definite lengths,
+; shortest integer/length encoding, no trailing bytes, 64 B input / 16384 B output.

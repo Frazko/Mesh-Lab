@@ -1,0 +1,15 @@
+[package]
+name = "mesh-ffi-jni"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mesh-ffi-c = { path = "../mesh-ffi-c" }
+mesh-protocol = { path = "../mesh-protocol" }
+jni = "=0.21.1"
+mesh-types = { path = "../mesh-types" }
+zeroize = "=1.8.2"

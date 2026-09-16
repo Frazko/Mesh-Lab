@@ -1,0 +1,11 @@
+[package]
+name = "mesh-codec"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mesh-types = { path = "../mesh-types" }

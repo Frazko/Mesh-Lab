@@ -1,0 +1,22 @@
+[package]
+name = "mesh-sim"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mesh-types = { path = "../mesh-types" }
+mesh-object = { path = "../mesh-object" }
+mesh-store = { path = "../mesh-store" }
+mesh-replication = { path = "../mesh-replication" }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+zeroize = "=1.8.2"
+
+[dev-dependencies]
+mesh-runtime = { path = "../mesh-runtime" }
+mesh-crypto = { path = "../mesh-crypto", features = ["os-rng"] }
+mesh-protocol = { path = "../mesh-protocol" }

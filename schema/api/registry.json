@@ -1,0 +1,1 @@
+{"version":1,"abi":1,"methods":{"engineInfo":0,"subscribe":1,"verifyBridge":2},"states":{"foundationOnly":0},"events":{"bridgeVerified":0},"errors":{"invalidArgument":1,"incompatibleVersion":2,"invalidHandle":3,"resourcePressure":4,"internalInvariant":5,"staleRequest":6},"limits":{"inputBytes":64,"outputBytes":16384,"events":64,"runtimes":16,"counter":9007199254740991}}

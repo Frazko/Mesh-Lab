@@ -1,0 +1,30 @@
+; Laboratory subset, not the complete A002/A003 wire protocol.
+; Definite lengths, shortest CBOR integers/lengths, no tags/maps/trailing bytes.
+; Signed wrappers retain the ORIGINAL canonical body bytes.
+id32 = bstr .size 32
+signature64 = bstr .size 64
+clock = 0..9223372036854775807
+positive = 1..9223372036854775807
+certificate = [body: bstr .size (1..900), signature64]
+certificate-body = [1, group: id32, member: id32, signing-key: id32,
+  delivery-key: id32, valid-from: clock, valid-until: clock, epoch: positive,
+  serial: positive, authority-key-id: id32]
+announcement = [body: bstr .size (1..8192), signature64]
+announcement-body = [1, group: id32, local-manifest: bstr .size (1..4096)]
+envelope = [1, header: bstr .size (1..2048), nonce: bstr .size 12,
+  wraps: [1*10 wrap], chunks: [1*48 ciphertext]]
+header-body = [1, suite: 1, group: id32, origin: id32, sequence: positive,
+  epoch: positive, namespace: tstr .size (1..64), schema: 1, created: clock,
+  expires: clock, hops: 1..16, targets: [1*10 target], clear-length: 1..49152,
+  salt: id32]
+target = [member: id32, delivery-key-id: id32]
+wrap = [encapsulated: id32, wrapped-key: bstr .size 48]
+ciphertext = bstr .size (17..1040)
+receipt = [body: bstr .size (1..1024), signature64]
+receipt-body = [1, stage: 1, group: id32, epoch: positive, context-id: id32,
+  storage-object-id: id32, origin: id32, sequence: positive, actor: id32,
+  committed-at: clock]
+; Additional semantic checks live in mesh-protocol: exact chunk sizes/counts,
+; sorted distinct targets, namespace ASCII, scope/key binding, certificate/time
+; validity, original manifest hashes, signatures and every AEAD authentication tag.
+; The TOTAL signed certificate/announcement/receipt limits are 1024/8192/1024.

@@ -1,0 +1,22 @@
+[package]
+name = "mesh-ffi-c"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+mesh-types = { path = "../mesh-types" }
+mesh-codec = { path = "../mesh-codec" }
+mesh-runtime = { path = "../mesh-runtime" }
+mesh-crypto = { path = "../mesh-crypto", features = ["os-rng"] }
+mesh-protocol = { path = "../mesh-protocol" }
+mesh-object = { path = "../mesh-object" }
+mesh-store = { path = "../mesh-store" }
+mesh-link = { path = "../mesh-link" }
+mesh-session = { path = "../mesh-session" }
+mesh-replication = { path = "../mesh-replication" }
+zeroize = "=1.8.2"
+sha2 = "=0.10.9"

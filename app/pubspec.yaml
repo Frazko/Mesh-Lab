@@ -1,0 +1,20 @@
+name: mesh_lab
+description: Laboratorio de conectividad mesh para iOS y Android.
+publish_to: none
+version: 0.1.0+10007
+environment:
+  sdk: ^3.13.2
+dependencies:
+  flutter:
+    sdk: flutter
+  geolocator: ^14.0.3
+  mesh_host:
+    path: ../platforms/mesh_host
+  record: ^7.1.1
+  shared_preferences: ^2.5.4
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 6.0.0
+flutter:
+  uses-material-design: true

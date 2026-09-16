@@ -1,0 +1,17 @@
+.DS_Store
+/target/
+/artifacts/
+**/.dart_tool/
+**/build/
+**/.gradle/
+**/local.properties
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/jniLibs/
+**/MeshEngine.xcframework/
+*.xcuserstate
+**/xcuserdata/
+
+**/.kotlin/
+**/__pycache__/
