@@ -21,6 +21,7 @@ class FakeGateway implements FieldMeshGateway {
   String lastVoiceLogicalId = '';
   FieldDelivery? nextDelivery;
   List<FieldCertifiedPayload> verifiedIncoming = const [];
+  List<FieldCertifiedVoicePayload> verifiedIncomingVoice = const [];
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -79,6 +80,17 @@ class FakeGateway implements FieldMeshGateway {
   }
 
   @override
+  Future<List<FieldCertifiedVoicePayload>> drainVerifiedIncomingVoice() async {
+    final next = verifiedIncomingVoice;
+    verifiedIncomingVoice = const [];
+    return next;
+  }
+
+  @override
+  Future<bool> playVoice(String objectId) async =>
+      RegExp(r'^[0-9a-f]{64}$').hasMatch(objectId) && playableVoice;
+
+  @override
   Future<FieldIdentity> prepareIdentity() async =>
       const FieldIdentity(fingerprint: 'a', storage: 'test');
   @override
@@ -133,6 +145,7 @@ class FakeHostApi extends MeshHostApi {
 
   DeliveryInfo value;
   List<VerifiedIncomingText> verifiedIncoming = const [];
+  List<VerifiedIncomingVoice> verifiedIncomingVoice = const [];
 
   final bluetooth = BluetoothInfo(
     available: true,
@@ -202,6 +215,13 @@ class FakeHostApi extends MeshHostApi {
   }
 
   @override
+  Future<List<VerifiedIncomingVoice>> drainVerifiedIncomingVoice() async {
+    final next = verifiedIncomingVoice;
+    verifiedIncomingVoice = const [];
+    return next;
+  }
+
+  @override
   Future<VoiceInfo> voiceInfo() async => voice;
 
   @override
@@ -219,6 +239,9 @@ class FakeHostApi extends MeshHostApi {
 
   @override
   Future<bool> playLastVoice() async => true;
+
+  @override
+  Future<bool> playVoice(String objectId) async => true;
 }
 
 void main() {
@@ -474,6 +497,40 @@ void main() {
         DateTime.fromMillisecondsSinceEpoch(1700000000000, isUtc: true),
       );
       expect(received.single.body, 'field-action-v1:payload');
+    },
+  );
+
+  test(
+    'host gateway maps certified voice metadata and object playback',
+    () async {
+      final host =
+          FakeHostApi(
+              DeliveryInfo(
+                logicalId: '',
+                targetCount: 0,
+                deliveredCount: 0,
+                state: 'queued',
+              ),
+            )
+            ..verifiedIncomingVoice = [
+              VerifiedIncomingVoice(
+                authorId: 'a' * 64,
+                objectId: 'b' * 64,
+                logicalId: 'c' * 32,
+                verifiedAtUnixSeconds: 1700000000,
+                durationMillis: 2500,
+              ),
+            ];
+      final gateway = MeshHostGateway(api: host);
+
+      final received = await gateway.drainVerifiedIncomingVoice();
+
+      expect(received, hasLength(1));
+      expect(received.single.authorId, 'a' * 64);
+      expect(received.single.objectId, 'b' * 64);
+      expect(received.single.logicalId, 'c' * 32);
+      expect(received.single.duration, const Duration(milliseconds: 2500));
+      expect(await gateway.playVoice('b' * 64), isTrue);
     },
   );
 
@@ -740,4 +797,65 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
   });
+
+  test(
+    'emits only receipt-certified voice with a scoped playback handle',
+    () async {
+      final gateway = FakeGateway()
+        ..verifiedIncomingVoice = [
+          FieldCertifiedVoicePayload(
+            authorId: 'a' * 64,
+            objectId: 'b' * 64,
+            logicalId: 'c' * 32,
+            verifiedAt: DateTime.utc(2026, 9, 16, 12),
+            duration: const Duration(seconds: 3),
+          ),
+        ]
+        ..playableVoice = true;
+      final sdk = FieldMeshClient(gateway: gateway);
+
+      final event = await sdk
+          .watchVerifiedIncomingVoice(interval: const Duration(milliseconds: 1))
+          .first;
+
+      expect(event.authorId, 'a' * 64);
+      expect(event.objectId, 'b' * 64);
+      expect(event.logicalId, 'c' * 32);
+      expect(event.duration, const Duration(seconds: 3));
+      expect(await sdk.playVerifiedVoice(event.objectId), isTrue);
+      expect(await sdk.playVerifiedVoice('not-a-certified-object'), isFalse);
+    },
+  );
+
+  test(
+    'fails closed for malformed or out-of-policy certified voice metadata',
+    () async {
+      final gateway = FakeGateway()
+        ..verifiedIncomingVoice = [
+          FieldCertifiedVoicePayload(
+            authorId: 'a' * 64,
+            objectId: 'b' * 64,
+            logicalId: 'broken',
+            verifiedAt: DateTime.utc(2026, 9, 16, 12),
+            duration: const Duration(seconds: 3),
+          ),
+          FieldCertifiedVoicePayload(
+            authorId: 'a' * 64,
+            objectId: 'd' * 64,
+            logicalId: 'c' * 32,
+            verifiedAt: DateTime.utc(2026, 9, 16, 12),
+            duration: const Duration(seconds: 9),
+          ),
+        ];
+      final sdk = FieldMeshClient(gateway: gateway);
+      final stream = sdk.watchVerifiedIncomingVoice(
+        interval: const Duration(milliseconds: 1),
+      );
+
+      await expectLater(
+        stream.first.timeout(const Duration(milliseconds: 30)),
+        throwsA(isA<TimeoutException>()),
+      );
+    },
+  );
 }

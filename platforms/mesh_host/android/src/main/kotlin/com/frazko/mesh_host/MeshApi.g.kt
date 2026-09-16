@@ -563,6 +563,65 @@ data class VerifiedIncomingText (
   }
 }
 
+/**
+ * Native-certified durable voice. Metadata is revealed only after the
+ * encrypted object and local receipt commit. Audio remains private to the
+ * host and can be played only by its certified object ID.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class VerifiedIncomingVoice (
+  val authorId: String,
+  val objectId: String,
+  val logicalId: String,
+  val verifiedAtUnixSeconds: Long,
+  val durationMillis: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): VerifiedIncomingVoice {
+      val authorId = pigeonVar_list[0] as String
+      val objectId = pigeonVar_list[1] as String
+      val logicalId = pigeonVar_list[2] as String
+      val verifiedAtUnixSeconds = pigeonVar_list[3] as Long
+      val durationMillis = pigeonVar_list[4] as Long
+      return VerifiedIncomingVoice(authorId, objectId, logicalId, verifiedAtUnixSeconds, durationMillis)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      authorId,
+      objectId,
+      logicalId,
+      verifiedAtUnixSeconds,
+      durationMillis,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as VerifiedIncomingVoice
+    return MeshApiPigeonUtils.deepEquals(this.authorId, other.authorId) && MeshApiPigeonUtils.deepEquals(this.objectId, other.objectId) && MeshApiPigeonUtils.deepEquals(this.logicalId, other.logicalId) && MeshApiPigeonUtils.deepEquals(this.verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && MeshApiPigeonUtils.deepEquals(this.durationMillis, other.durationMillis)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.authorId)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.objectId)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.logicalId)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.verifiedAtUnixSeconds)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.durationMillis)
+    return result
+  }
+  override fun toString(): String {
+    return "VerifiedIncomingVoice(authorId=$authorId, objectId=$objectId, logicalId=$logicalId, verifiedAtUnixSeconds=$verifiedAtUnixSeconds, durationMillis=$durationMillis)"
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class VoiceInfo (
   val receivedCount: Long,
@@ -771,15 +830,20 @@ private open class MeshApiPigeonCodec : StandardMessageCodec() {
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VoiceInfo.fromList(it)
+          VerifiedIncomingVoice.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          DeliveryInfo.fromList(it)
+          VoiceInfo.fromList(it)
         }
       }
       138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          DeliveryInfo.fromList(it)
+        }
+      }
+      139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           AwareInfo.fromList(it)
         }
@@ -817,16 +881,20 @@ private open class MeshApiPigeonCodec : StandardMessageCodec() {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is VoiceInfo -> {
+      is VerifiedIncomingVoice -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is DeliveryInfo -> {
+      is VoiceInfo -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is AwareInfo -> {
+      is DeliveryInfo -> {
         stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is AwareInfo -> {
+        stream.write(139)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -855,9 +923,11 @@ interface MeshHostApi {
   suspend fun sendText(message: String, logicalId: String): Boolean
   suspend fun deliveryInfo(logicalId: String): DeliveryInfo
   suspend fun drainVerifiedIncomingText(): List<VerifiedIncomingText>
+  suspend fun drainVerifiedIncomingVoice(): List<VerifiedIncomingVoice>
   suspend fun voiceInfo(): VoiceInfo
   suspend fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean
   suspend fun playLastVoice(): Boolean
+  suspend fun playVoice(objectId: String): Boolean
   suspend fun subscribe(cursor: Long): EngineSnapshot
   suspend fun verifyBridge(requestId: Long): EngineSnapshot
 
@@ -1188,6 +1258,23 @@ interface MeshHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingVoice$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.drainVerifiedIncomingVoice())
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.voiceInfo$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
@@ -1232,6 +1319,25 @@ interface MeshHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.playLastVoice())
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.playVoice$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val objectIdArg = args[0] as String
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.playVoice(objectIdArg))
               } catch (exception: Throwable) {
                 MeshApiPigeonUtils.wrapError(exception)
               }

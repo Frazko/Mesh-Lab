@@ -121,6 +121,24 @@ final class FieldVerifiedIncomingText {
   final String body;
 }
 
+/// Native-certified durable voice. Its audio never crosses the SDK boundary;
+/// replay is addressed by [objectId] and performed in the private native host.
+final class FieldVerifiedIncomingVoice {
+  const FieldVerifiedIncomingVoice({
+    required this.authorId,
+    required this.objectId,
+    required this.logicalId,
+    required this.verifiedAt,
+    required this.duration,
+  });
+
+  final String authorId;
+  final String objectId;
+  final String logicalId;
+  final DateTime verifiedAt;
+  final Duration duration;
+}
+
 final class FieldIncomingLocation extends FieldIncomingEvent {
   const FieldIncomingLocation({required this.location});
 
@@ -241,4 +259,15 @@ abstract interface class FieldMeshVerifiedIncomingSource {
   Stream<FieldVerifiedIncomingText> watchVerifiedIncomingText({
     Duration interval,
   });
+}
+
+/// Optional voice capability. A voice is exposed only after native durable
+/// verification and receipt commit; products cannot access a file path or raw
+/// audio bytes for incoming notes.
+abstract interface class FieldMeshVerifiedIncomingVoiceSource {
+  Stream<FieldVerifiedIncomingVoice> watchVerifiedIncomingVoice({
+    Duration interval,
+  });
+
+  Future<bool> playVerifiedVoice(String objectId);
 }

@@ -137,6 +137,20 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
     }
   }
 
+  func drainVerifiedIncomingVoice() async throws -> [VerifiedIncomingVoice] {
+    onMain {
+      self.bluetooth.drainVerifiedIncomingVoice().map { event in
+        VerifiedIncomingVoice(
+          authorId: event.authorId,
+          objectId: event.objectId,
+          logicalId: event.logicalId,
+          verifiedAtUnixSeconds: event.verifiedAtUnixSeconds,
+          durationMillis: event.durationMillis
+        )
+      }
+    }
+  }
+
   func deliveryInfo(logicalId: String) async throws -> DeliveryInfo {
     try await execute {
       guard let requested = BluetoothAccess.decodeLogicalId(logicalId) else { throw NativeFailure.status(1) }
@@ -160,6 +174,10 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
   func playLastVoice() async throws -> Bool {
     if Thread.isMainThread { return bluetooth.playLastVoice() }
     return DispatchQueue.main.sync { bluetooth.playLastVoice() }
+  }
+  func playVoice(objectId: String) async throws -> Bool {
+    if Thread.isMainThread { return bluetooth.playVoice(objectId) }
+    return DispatchQueue.main.sync { bluetooth.playVoice(objectId) }
   }
   func engineInfo() async throws -> EngineInfo {
     try await execute {

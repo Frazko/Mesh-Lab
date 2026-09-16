@@ -10,6 +10,16 @@ struct CertifiedIncomingText {
   let body: String
 }
 
+/// Metadata for audio that native code has already verified and committed.
+/// Audio stays private to the host and is addressed only by this object ID.
+struct CertifiedIncomingVoice {
+  let authorId: String
+  let objectId: String
+  let logicalId: String
+  let verifiedAtUnixSeconds: Int64
+  let durationMillis: Int64
+}
+
 final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralManagerDelegate, CBPeripheralDelegate {
   private let serviceUUID = CBUUID(string: "3C2865E0-1B51-49B4-9F22-4F15D5667761")
   private let rxUUID = CBUUID(string: "3C2865E1-1B51-49B4-9F22-4F15D5667761")
@@ -28,6 +38,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   // Product adapters drain this FIFO; unlike `lastMessage`, it cannot collapse
   // a burst of already-certified durable deliveries into one mutable value.
   private var verifiedIncoming = [CertifiedIncomingText]()
+  private var verifiedIncomingVoice = [CertifiedIncomingVoice]()
   private var recentTextIds = Set<UInt32>()
   private var recentTextOrder = [UInt32]()
   private var forwardedRelayFrames = [String: [UInt8]]()
@@ -73,6 +84,8 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private let enrollmentRequest: UInt8 = 0xf2
   private let enrollmentPolicy: UInt8 = 0xf3
   private let voiceMarker: UInt8 = 0x56
+  private let durableVoiceVersion: UInt8 = 2
+  private let durableVoiceHeaderBytes = 22
   private let textMarker: UInt8 = 0x7f
   private let receiptMarker: UInt8 = 0x7e
   private let heartbeatMarker: UInt8 = 0x7d
@@ -451,11 +464,26 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     let textOffset = textLengthOffset + 2
     guard textLength > 0, textOffset + textLength == packet.count else { return }
     let payload = Array(packet[textOffset..<packet.count])
-    if payload.count >= 5, payload[0] == voiceMarker {
-      let duration = (Int64(payload[1]) << 24) | (Int64(payload[2]) << 16) | (Int64(payload[3]) << 8) | Int64(payload[4])
-      let audio = Array(payload.dropFirst(5))
-      guard duration > 0, duration <= maxVoiceDurationMillis, !audio.isEmpty, audio.count <= maxVoiceBytes else { return }
-      do { let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("mesh-voice", isDirectory: true); try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true); let file = folder.appendingPathComponent("latest.m4a"); try Data(audio).write(to: file, options: .atomic); lastVoiceFile = file; lastVoiceDurationMillis = duration; receivedVoices += 1; _ = drainDurableReceiptOutbox() } catch { }
+    if payload.count >= durableVoiceHeaderBytes, payload[0] == voiceMarker, payload[1] == durableVoiceVersion {
+      let duration = (Int64(payload[2]) << 24) | (Int64(payload[3]) << 16) | (Int64(payload[4]) << 8) | Int64(payload[5])
+      let logicalId = payload[6..<22].map { String(format: "%02x", $0) }.joined()
+      let audio = Array(payload.dropFirst(durableVoiceHeaderBytes))
+      guard duration > 0, duration <= maxVoiceDurationMillis,
+            logicalId.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil,
+            !audio.isEmpty, audio.count <= maxVoiceBytes else { return }
+      do {
+        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+          .appendingPathComponent("mesh-voice", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("\(objectId).m4a")
+        try Data(audio).write(to: file, options: .atomic)
+        lastVoiceFile = file
+        lastVoiceDurationMillis = duration
+        receivedVoices += 1
+        if verifiedIncomingVoice.count == 64 { verifiedIncomingVoice.removeFirst() }
+        verifiedIncomingVoice.append(CertifiedIncomingVoice(authorId: authorId, objectId: objectId, logicalId: logicalId, verifiedAtUnixSeconds: verifiedAt, durationMillis: duration))
+        _ = drainDurableReceiptOutbox()
+      } catch { }
       return
     }
     guard let text = String(bytes: payload, encoding: .utf8) else { return }
@@ -470,6 +498,12 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   func drainVerifiedIncomingText() -> [CertifiedIncomingText] {
     let result = verifiedIncoming
     verifiedIncoming.removeAll(keepingCapacity: true)
+    return result
+  }
+
+  func drainVerifiedIncomingVoice() -> [CertifiedIncomingVoice] {
+    let result = verifiedIncomingVoice
+    verifiedIncomingVoice.removeAll(keepingCapacity: true)
     return result
   }
 
@@ -693,7 +727,9 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
           durationMillis > 0, durationMillis <= maxVoiceDurationMillis else { return false }
     guard let logical = Self.decodeLogicalId(logicalId) else { return false }
     guard durationMillis <= Int64(UInt32.max), let material = try? SecureIdentity().groupMaterial() else { return false }
-    let durable: [UInt8] = [voiceMarker, UInt8((durationMillis >> 24) & 0xff), UInt8((durationMillis >> 16) & 0xff), UInt8((durationMillis >> 8) & 0xff), UInt8(durationMillis & 0xff)] + audio
+    let durable: [UInt8] = [voiceMarker, durableVoiceVersion,
+      UInt8((durationMillis >> 24) & 0xff), UInt8((durationMillis >> 16) & 0xff),
+      UInt8((durationMillis >> 8) & 0xff), UInt8(durationMillis & 0xff)] + logical + audio
     guard let queued = runtime({ try NativeRuntime.shared.enqueueDurableText(durable, logicalId: logical, material: material) }),
           queued > 0 else { return false }
     // A radio write is deliberately never used as a fallback: only the
@@ -711,7 +747,21 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   }
 
   func playLastVoice() -> Bool {
-    guard let file = lastVoiceFile, FileManager.default.fileExists(atPath: file.path) else { return false }
+    playVoiceFile(lastVoiceFile)
+  }
+
+  /// The product never receives a file path. It can replay only an immutable,
+  /// receipt-certified voice object returned by the native FIFO.
+  func playVoice(_ objectId: String) -> Bool {
+    guard objectId.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { return false }
+    let file = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("mesh-voice", isDirectory: true)
+      .appendingPathComponent("\(objectId).m4a")
+    return playVoiceFile(file)
+  }
+
+  private func playVoiceFile(_ file: URL?) -> Bool {
+    guard let file, FileManager.default.fileExists(atPath: file.path) else { return false }
     do {
       voicePlayer = try AVAudioPlayer(contentsOf: file)
       guard voicePlayer?.prepareToPlay() == true else { return false }

@@ -1128,3 +1128,25 @@ sin guiones que requiere el SDK, manteniendo ambas como la misma acción. Las
 pruebas rechazan UUIDs que no sean canónicos en minúscula, de una versión o
 variante distinta, y texto arbitrario; por tanto no existe un fallback que
 invente otro ID de mesh.
+
+## SDK — voz entrante certificada por objeto
+
+**Actualizado: 2026-09-16. Avance global: 64%; bloque SDK–Convoy: 88%; Wi‑Fi Aware: 90%.**
+
+El host ya no reduce cada recepción de voz durable a “la última nota”. El
+completion packet v2 se interpreta en Android e iOS sólo después del commit de
+receipt; una voz v2 lleva su ID lógico dentro del payload cifrado y se almacena
+privadamente bajo el ID de objeto certificado. Los hosts drenan una FIFO de
+`VerifiedIncomingVoice` por Pigeon con autor, objeto, ID lógico, instante y
+duración. El SDK añade `FieldMeshVerifiedIncomingVoiceSource`, vuelve a validar
+cada identificador, duración y hora, y sólo permite reproducir por el ID de
+objeto devuelto. Ningún byte de audio, ruta de archivo, frame, receipt o clave
+entra a una aplicación consumidora.
+
+Pasaron 25 pruebas del SDK, `flutter analyze` limpio en `mesh_field_sdk` y
+`mesh_host`, la regeneración Pigeon reproducible y cobertura de las unidades
+nuevas/modificadas: `field_mesh_client.dart` 293/312 (93.9%) y
+`field_mesh_models.dart` 17/17 (100%). La compilación Release Android terminó correctamente y no se instaló ningún
+paquete. Sigue pendiente la prueba física Android↔iOS con dos voces recibidas
+fuera de orden y la adaptación de la nota certificada a la conversación de
+Convoy; por ello no se aumenta el global.

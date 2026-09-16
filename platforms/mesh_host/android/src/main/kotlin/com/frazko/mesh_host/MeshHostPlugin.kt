@@ -333,6 +333,17 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
             )
         }
 
+    override suspend fun drainVerifiedIncomingVoice(): List<VerifiedIncomingVoice> =
+        bluetooth.drainVerifiedIncomingVoice().map { event ->
+            VerifiedIncomingVoice(
+                event.authorId,
+                event.objectId,
+                event.logicalId,
+                event.verifiedAtUnixSeconds,
+                event.durationMillis,
+            )
+        }
+
     override suspend fun deliveryInfo(logicalId: String): DeliveryInfo = withContext(NativeRuntime.dispatcher) {
         val requested = logicalId.takeIf { it.matches(Regex("[0-9a-f]{32}")) }
             ?.let { value -> ByteArray(16) { index -> value.substring(index * 2, index * 2 + 2).toInt(16).toByte() } }
@@ -353,6 +364,7 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
     override suspend fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean =
         bluetooth.sendVoice(audio, durationMillis, logicalId)
     override suspend fun playLastVoice(): Boolean = bluetooth.playLastVoice()
+    override suspend fun playVoice(objectId: String): Boolean = bluetooth.playVoice(objectId)
     override suspend fun engineInfo(): EngineInfo = execute {
         val i = MeshEnvelope(NativeRuntime.request(0)).info()
         EngineInfo(i.version, i.abi, i.api, i.phase, i.build)

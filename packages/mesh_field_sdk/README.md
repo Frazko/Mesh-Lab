@@ -39,14 +39,15 @@ una orientación nula significa que el teléfono no pudo obtenerla con confianza
 `watchIncoming` entrega texto o ubicación recibida para una interfaz de producto.
 
 Para una integración que debe atribuir y reconciliar acciones, el cliente
-implementa la capacidad opcional `FieldMeshVerifiedIncomingSource`.
-`watchVerifiedIncomingText` drena una cola FIFO nativa de texto durable que
-incluye origen de roster, ID de objeto y momento de verificación. Cada entrada
-se publica únicamente después de verificar todos los chunks y confirmar el
-receipt local; el SDK vuelve a validar formato y descarta evidencia malformada.
-El ID lógico de una aplicación todavía debe viajar en un sobre de producto
-cifrado antes de que una aplicación pueda correlacionar una acción entrante con
-su propio outbox.
+implementa las capacidades opcionales `FieldMeshVerifiedIncomingSource` y
+`FieldMeshVerifiedIncomingVoiceSource`. Sus colas FIFO nativas contienen sólo
+objetos durables verificados tras todos los chunks y el receipt local. La voz
+incluye origen de roster, ID de objeto, ID lógico, instante y duración;
+`playVerifiedVoice(objectId)` reproduce el archivo privado correspondiente sin
+entregar bytes ni una ruta al producto. El SDK vuelve a validar formato y
+descarta evidencia malformada. El ID lógico de una aplicación viaja dentro del
+payload cifrado, antes de que una aplicación pueda correlacionar una acción
+entrante con su propio outbox.
 No expone objetos cifrados, receipts, identidades de destinatarios, rutas, IP
 ni claves. La presencia global y el rastreo continuo en segundo plano siguen
 fuera del SDK porque requieren una política de producto y validación física.

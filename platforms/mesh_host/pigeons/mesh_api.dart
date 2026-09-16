@@ -105,6 +105,24 @@ class VerifiedIncomingText {
   String body;
 }
 
+/// Native-certified durable voice. Metadata is revealed only after the
+/// encrypted object and local receipt commit. Audio remains private to the
+/// host and can be played only by its certified object ID.
+class VerifiedIncomingVoice {
+  VerifiedIncomingVoice({
+    required this.authorId,
+    required this.objectId,
+    required this.logicalId,
+    required this.verifiedAtUnixSeconds,
+    required this.durationMillis,
+  });
+  String authorId;
+  String objectId;
+  String logicalId;
+  int verifiedAtUnixSeconds;
+  int durationMillis;
+}
+
 class VoiceInfo {
   VoiceInfo({
     required this.receivedCount,
@@ -194,11 +212,15 @@ abstract class MeshHostApi {
   @async
   List<VerifiedIncomingText> drainVerifiedIncomingText();
   @async
+  List<VerifiedIncomingVoice> drainVerifiedIncomingVoice();
+  @async
   VoiceInfo voiceInfo();
   @async
   bool sendVoice(Uint8List audio, int durationMillis, String logicalId);
   @async
   bool playLastVoice();
+  @async
+  bool playVoice(String objectId);
   @async
   EngineSnapshot subscribe(int cursor);
   @async

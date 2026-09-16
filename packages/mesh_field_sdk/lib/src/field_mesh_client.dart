@@ -15,6 +15,24 @@ FieldDeliveryState _deliveryState(String value) => switch (value) {
   _ => throw StateError('Unexpected native delivery state'),
 };
 
+/// Native completion payload for an encrypted voice note. It remains an
+/// adapter type: the public client validates every field before exposing it.
+final class FieldCertifiedVoicePayload {
+  const FieldCertifiedVoicePayload({
+    required this.authorId,
+    required this.objectId,
+    required this.logicalId,
+    required this.verifiedAt,
+    required this.duration,
+  });
+
+  final String authorId;
+  final String objectId;
+  final String logicalId;
+  final DateTime verifiedAt;
+  final Duration duration;
+}
+
 /// Completion payload supplied by the native host. It is kept internal to the
 /// adapter; an app receives [FieldVerifiedIncomingText] only after the SDK
 /// validates its encrypted product envelope too.
@@ -49,8 +67,10 @@ abstract interface class FieldMeshGateway {
   Future<bool> sendText(String message, String logicalId);
   Future<FieldDelivery?> delivery(String logicalId);
   Future<List<FieldCertifiedPayload>> drainVerifiedIncomingText();
+  Future<List<FieldCertifiedVoicePayload>> drainVerifiedIncomingVoice();
   Future<bool> sendVoice(Uint8List audio, int durationMillis, String logicalId);
   Future<bool> playLastVoice();
+  Future<bool> playVoice(String objectId);
 }
 
 /// Default gateway for iOS and Android. It maps mutable Pigeon DTOs into
@@ -136,6 +156,23 @@ final class MeshHostGateway implements FieldMeshGateway {
           .toList(growable: false);
 
   @override
+  Future<List<FieldCertifiedVoicePayload>> drainVerifiedIncomingVoice() async =>
+      (await _api.drainVerifiedIncomingVoice())
+          .map(
+            (value) => FieldCertifiedVoicePayload(
+              authorId: value.authorId,
+              objectId: value.objectId,
+              logicalId: value.logicalId,
+              verifiedAt: DateTime.fromMillisecondsSinceEpoch(
+                value.verifiedAtUnixSeconds * 1000,
+                isUtc: true,
+              ),
+              duration: Duration(milliseconds: value.durationMillis),
+            ),
+          )
+          .toList(growable: false);
+
+  @override
   Future<FieldVoiceStatus> voiceStatus() async =>
       _voice(await _api.voiceInfo());
   @override
@@ -161,6 +198,8 @@ final class MeshHostGateway implements FieldMeshGateway {
   ) => _api.sendVoice(audio, durationMillis, logicalId);
   @override
   Future<bool> playLastVoice() => _api.playLastVoice();
+  @override
+  Future<bool> playVoice(String objectId) => _api.playVoice(objectId);
 }
 
 /// Reusable client for Convoy and other product applications.
@@ -168,7 +207,8 @@ final class FieldMeshClient
     implements
         FieldMeshSdk,
         FieldMeshActionSender,
-        FieldMeshVerifiedIncomingSource {
+        FieldMeshVerifiedIncomingSource,
+        FieldMeshVerifiedIncomingVoiceSource {
   FieldMeshClient({FieldMeshGateway? gateway})
     : _gateway = gateway ?? MeshHostGateway();
 
@@ -326,6 +366,14 @@ final class FieldMeshClient
   @override
   Future<bool> playLastVoice() => _gateway.playLastVoice();
 
+  @override
+  Future<bool> playVerifiedVoice(String objectId) {
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(objectId)) {
+      return Future<bool>.value(false);
+    }
+    return _gateway.playVoice(objectId);
+  }
+
   String? _actionId(String? supplied) {
     if (supplied == null) return _nextLogicalId();
     return RegExp(r'^[0-9a-f]{32}$').hasMatch(supplied) ? supplied : null;
@@ -384,6 +432,43 @@ final class FieldMeshClient
       }
       await Future<void>.delayed(interval);
     }
+  }
+
+  @override
+  Stream<FieldVerifiedIncomingVoice> watchVerifiedIncomingVoice({
+    Duration interval = const Duration(seconds: 1),
+  }) async* {
+    if (interval <= Duration.zero) {
+      throw ArgumentError.value(interval, 'interval', 'must be positive');
+    }
+    while (true) {
+      final events = await _gateway.drainVerifiedIncomingVoice();
+      for (final event in events) {
+        final verified = _decodeCertifiedVoice(event);
+        if (verified != null) yield verified;
+      }
+      await Future<void>.delayed(interval);
+    }
+  }
+
+  FieldVerifiedIncomingVoice? _decodeCertifiedVoice(
+    FieldCertifiedVoicePayload event,
+  ) {
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(event.authorId) ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(event.objectId) ||
+        !RegExp(r'^[0-9a-f]{32}$').hasMatch(event.logicalId) ||
+        event.verifiedAt.millisecondsSinceEpoch <= 0 ||
+        event.duration <= Duration.zero ||
+        event.duration > const Duration(seconds: 8)) {
+      return null;
+    }
+    return FieldVerifiedIncomingVoice(
+      authorId: event.authorId,
+      objectId: event.objectId,
+      logicalId: event.logicalId,
+      verifiedAt: event.verifiedAt,
+      duration: event.duration,
+    );
   }
 
   FieldVerifiedIncomingText? _decodeCertifiedAction(

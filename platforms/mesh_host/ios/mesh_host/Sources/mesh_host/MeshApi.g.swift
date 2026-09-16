@@ -558,6 +558,65 @@ struct VerifiedIncomingText: Hashable, CustomStringConvertible {
   }
 }
 
+/// Native-certified durable voice. Metadata is revealed only after the
+/// encrypted object and local receipt commit. Audio remains private to the
+/// host and can be played only by its certified object ID.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct VerifiedIncomingVoice: Hashable, CustomStringConvertible {
+  var authorId: String
+  var objectId: String
+  var logicalId: String
+  var verifiedAtUnixSeconds: Int64
+  var durationMillis: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> VerifiedIncomingVoice? {
+    let authorId = pigeonVar_list[0] as! String
+    let objectId = pigeonVar_list[1] as! String
+    let logicalId = pigeonVar_list[2] as! String
+    let verifiedAtUnixSeconds = pigeonVar_list[3] as! Int64
+    let durationMillis = pigeonVar_list[4] as! Int64
+
+    return VerifiedIncomingVoice(
+      authorId: authorId,
+      objectId: objectId,
+      logicalId: logicalId,
+      verifiedAtUnixSeconds: verifiedAtUnixSeconds,
+      durationMillis: durationMillis
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      authorId,
+      objectId,
+      logicalId,
+      verifiedAtUnixSeconds,
+      durationMillis,
+    ]
+  }
+  static func == (lhs: VerifiedIncomingVoice, rhs: VerifiedIncomingVoice) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return MeshApiPigeonInternal.deepEquals(lhs.authorId, rhs.authorId) && MeshApiPigeonInternal.deepEquals(lhs.objectId, rhs.objectId) && MeshApiPigeonInternal.deepEquals(lhs.logicalId, rhs.logicalId) && MeshApiPigeonInternal.deepEquals(lhs.verifiedAtUnixSeconds, rhs.verifiedAtUnixSeconds) && MeshApiPigeonInternal.deepEquals(lhs.durationMillis, rhs.durationMillis)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("VerifiedIncomingVoice")
+    MeshApiPigeonInternal.deepHash(value: authorId, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: objectId, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: logicalId, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: verifiedAtUnixSeconds, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: durationMillis, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "VerifiedIncomingVoice(authorId: \(String(describing: authorId)), objectId: \(String(describing: objectId)), logicalId: \(String(describing: logicalId)), verifiedAtUnixSeconds: \(String(describing: verifiedAtUnixSeconds)), durationMillis: \(String(describing: durationMillis)))"
+  }
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct VoiceInfo: Hashable, CustomStringConvertible {
   var receivedCount: Int64
@@ -747,10 +806,12 @@ private class MeshApiPigeonCodecReader: FlutterStandardReader {
     case 135:
       return VerifiedIncomingText.fromList(self.readValue() as! [Any?])
     case 136:
-      return VoiceInfo.fromList(self.readValue() as! [Any?])
+      return VerifiedIncomingVoice.fromList(self.readValue() as! [Any?])
     case 137:
-      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+      return VoiceInfo.fromList(self.readValue() as! [Any?])
     case 138:
+      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+    case 139:
       return AwareInfo.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -781,14 +842,17 @@ private class MeshApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? VerifiedIncomingText {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? VoiceInfo {
+    } else if let value = value as? VerifiedIncomingVoice {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? DeliveryInfo {
+    } else if let value = value as? VoiceInfo {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? AwareInfo {
+    } else if let value = value as? DeliveryInfo {
       super.writeByte(138)
+      super.writeValue(value.toList())
+    } else if let value = value as? AwareInfo {
+      super.writeByte(139)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -831,9 +895,11 @@ protocol MeshHostApi {
   func sendText(message: String, logicalId: String) async throws -> Bool
   func deliveryInfo(logicalId: String) async throws -> DeliveryInfo
   func drainVerifiedIncomingText() async throws -> [VerifiedIncomingText]
+  func drainVerifiedIncomingVoice() async throws -> [VerifiedIncomingVoice]
   func voiceInfo() async throws -> VoiceInfo
   func sendVoice(audio: FlutterStandardTypedData, durationMillis: Int64, logicalId: String) async throws -> Bool
   func playLastVoice() async throws -> Bool
+  func playVoice(objectId: String) async throws -> Bool
   func subscribe(cursor: Int64) async throws -> EngineSnapshot
   func verifyBridge(requestId: Int64) async throws -> EngineSnapshot
 }
@@ -1125,6 +1191,21 @@ class MeshHostApiSetup {
     } else {
       drainVerifiedIncomingTextChannel.setMessageHandler(nil)
     }
+    let drainVerifiedIncomingVoiceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingVoice\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      drainVerifiedIncomingVoiceChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            let result = try await api.drainVerifiedIncomingVoice()
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      drainVerifiedIncomingVoiceChannel.setMessageHandler(nil)
+    }
     let voiceInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.voiceInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       voiceInfoChannel.setMessageHandler { _, reply in
@@ -1173,6 +1254,23 @@ class MeshHostApiSetup {
       }
     } else {
       playLastVoiceChannel.setMessageHandler(nil)
+    }
+    let playVoiceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.playVoice\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      playVoiceChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let objectIdArg = args[0] as! String
+        Task { @MainActor in
+          do {
+            let result = try await api.playVoice(objectId: objectIdArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      playVoiceChannel.setMessageHandler(nil)
     }
     let subscribeChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.subscribe\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

@@ -53,6 +53,16 @@ internal data class CertifiedIncomingText(
     val body: String,
 )
 
+/** Metadata for audio that native code has already verified and committed.
+ * The file name is derived only from the certified object ID. */
+internal data class CertifiedIncomingVoice(
+    val authorId: String,
+    val objectId: String,
+    val logicalId: String,
+    val verifiedAtUnixSeconds: Long,
+    val durationMillis: Long,
+)
+
 internal class BluetoothAccess(
     private val context: Context,
     private val identity: SecureIdentity,
@@ -86,6 +96,7 @@ internal class BluetoothAccess(
     // drained atomically so concurrent messages cannot be collapsed into a
     // mutable “last message” snapshot.
     private val verifiedIncoming = ArrayDeque<CertifiedIncomingText>()
+    private val verifiedIncomingVoice = ArrayDeque<CertifiedIncomingVoice>()
     // Text travels on the preferred local Wi-Fi link and, while available, the
     // authenticated BLE link as a second encrypted copy.  The small envelope
     // makes that redundancy invisible to the conversation history.
@@ -895,11 +906,21 @@ internal class BluetoothAccess(
         val textOffset = textLengthOffset + 2
         if (textLength == 0 || textOffset + textLength != packet.size) return
         val payload = packet.copyOfRange(textOffset, packet.size)
-        if (payload.size >= 5 && payload[0] == voiceMarker) {
-            val duration = ((payload[1].toInt() and 255) shl 24) or ((payload[2].toInt() and 255) shl 16) or ((payload[3].toInt() and 255) shl 8) or (payload[4].toInt() and 255)
-            val audio = payload.copyOfRange(5, payload.size)
-            if (duration !in 1..maxVoiceDurationMillis.toInt() || audio.isEmpty() || audio.size > maxVoiceBytes) return
-            try { val folder = File(context.cacheDir, "mesh-voice").apply { mkdirs() }; val file = File(folder, "latest.m4a"); file.writeBytes(audio); lastVoiceFile = file; lastVoiceDurationMillis = duration.toLong(); receivedVoices++ } catch (_: Exception) { return }
+        if (payload.size >= durableVoiceHeaderBytes && payload[0] == voiceMarker && payload[1] == durableVoiceVersion) {
+            val duration = readInt(payload, 2).toLong()
+            val logicalId = payload.copyOfRange(6, 22).joinToString("") { "%02x".format(it.toInt() and 255) }
+            val audio = payload.copyOfRange(durableVoiceHeaderBytes, payload.size)
+            if (duration !in 1..maxVoiceDurationMillis || !logicalId.matches(Regex("[0-9a-f]{32}")) || audio.isEmpty() || audio.size > maxVoiceBytes) return
+            try {
+                val folder = File(context.cacheDir, "mesh-voice").apply { mkdirs() }
+                val file = File(folder, "$objectId.m4a")
+                file.writeBytes(audio)
+                lastVoiceFile = file
+                lastVoiceDurationMillis = duration
+                receivedVoices++
+                if (verifiedIncomingVoice.size == 64) verifiedIncomingVoice.removeFirst()
+                verifiedIncomingVoice.addLast(CertifiedIncomingVoice(authorId, objectId, logicalId, verifiedAt, duration))
+            } catch (_: Exception) { return }
             drainDurableReceiptOutbox(); return
         }
         val text = try { payload.toString(Charsets.UTF_8) } catch (_: Exception) { return }
@@ -916,6 +937,12 @@ internal class BluetoothAccess(
     fun drainVerifiedIncomingText(): List<CertifiedIncomingText> = synchronized(verifiedIncoming) {
         buildList(verifiedIncoming.size) {
             while (verifiedIncoming.isNotEmpty()) add(verifiedIncoming.removeFirst())
+        }
+    }
+
+    fun drainVerifiedIncomingVoice(): List<CertifiedIncomingVoice> = synchronized(verifiedIncomingVoice) {
+        buildList(verifiedIncomingVoice.size) {
+            while (verifiedIncomingVoice.isNotEmpty()) add(verifiedIncomingVoice.removeFirst())
         }
     }
 
@@ -1203,7 +1230,12 @@ internal class BluetoothAccess(
     @Synchronized fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean {
         if (audio.isEmpty() || audio.size > maxVoiceBytes || durationMillis !in 1..maxVoiceDurationMillis) return false
         val id = decodeLogicalId(logicalId) ?: return false
-        val durable = ByteArray(5 + audio.size); durable[0] = voiceMarker; writeInt(durable, 1, durationMillis.toInt()); audio.copyInto(durable, 5)
+        val durable = ByteArray(durableVoiceHeaderBytes + audio.size)
+        durable[0] = voiceMarker
+        durable[1] = durableVoiceVersion
+        writeInt(durable, 2, durationMillis.toInt())
+        id.copyInto(durable, 6)
+        audio.copyInto(durable, durableVoiceHeaderBytes)
         val queued = try { NativeRuntime.enqueueDurableText(identity.groupMaterial(), durable, id) } catch (_: Exception) { return false }
         if (queued <= 0) return false
         // Never fall back to the legacy RAM-only voice packets. A successful
@@ -1224,12 +1256,21 @@ internal class BluetoothAccess(
         },
     )
 
-    @Synchronized fun playLastVoice(): Boolean {
-        val file = lastVoiceFile?.takeIf { it.isFile } ?: return false
+    @Synchronized fun playLastVoice(): Boolean = playVoiceFile(lastVoiceFile?.takeIf { it.isFile })
+
+    /** A product can only request a host-private file using the immutable ID
+     * emitted from the receipt-backed voice FIFO. */
+    @Synchronized fun playVoice(objectId: String): Boolean {
+        if (!objectId.matches(Regex("[0-9a-f]{64}"))) return false
+        return playVoiceFile(File(File(context.cacheDir, "mesh-voice"), "$objectId.m4a").takeIf { it.isFile })
+    }
+
+    private fun playVoiceFile(file: File?): Boolean {
+        val playable = file ?: return false
         return try {
             voicePlayer?.release()
             voicePlayer = MediaPlayer().apply {
-                setDataSource(file.path)
+                setDataSource(playable.path)
                 prepare()
                 start()
             }
@@ -1410,6 +1451,8 @@ internal class BluetoothAccess(
         const val enrollmentRequest = 0xf2
         const val enrollmentPolicy = 0xf3
         const val voiceMarker: Byte = 0x56
+        const val durableVoiceVersion: Byte = 2
+        const val durableVoiceHeaderBytes = 22
         const val textMarker: Byte = 0x7f
         const val receiptMarker: Byte = 0x7e
         const val heartbeatMarker: Byte = 0x7d
