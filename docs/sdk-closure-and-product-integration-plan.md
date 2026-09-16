@@ -61,7 +61,7 @@ radio en sus pantallas ni en su capa Supabase.
 | Participante autenticado | Identidad y grupo de campo | Liga el miembro autorizado de la sesión con su inscripción firmada. |
 | Estado del convoy | `watch()` | Actualiza el semáforo local; no finge presencia global. |
 | Mensaje cercano | `sendText` y `FieldDelivery` | Crea una burbuja local con ID lógico y actualiza su estado verificable. |
-| Ubicación del vehículo | `sendLocation(FieldLocation)` | Envía latitud, longitud, precisión, hora y rumbo; el mapa rota el vehículo con `headingDegrees`. |
+| Ubicación de participante | `sendLocation(FieldLocation)` | Convoy envía latitud, longitud, precisión y hora; sus marcadores usan foto o iniciales y no consumen rumbo. |
 | Voz | `sendVoice` y recepción de voz | Muestra una nota disponible sólo después de que el SDK confirme su recepción. |
 | Mensaje o ubicación recibida | `watchIncoming()` | Inserta contenido cercano en un carril de chat separado hasta que exista una política explícita de sincronización con Supabase. |
 
