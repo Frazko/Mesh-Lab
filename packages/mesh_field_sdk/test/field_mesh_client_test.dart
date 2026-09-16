@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +20,7 @@ class FakeGateway implements FieldMeshGateway {
   String lastLogicalId = '';
   String lastVoiceLogicalId = '';
   FieldDelivery? nextDelivery;
+  List<FieldCertifiedPayload> verifiedIncoming = const [];
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -68,6 +71,13 @@ class FakeGateway implements FieldMeshGateway {
             );
   @override
   Future<bool> playLastVoice() async => playableVoice;
+  @override
+  Future<List<FieldCertifiedPayload>> drainVerifiedIncomingText() async {
+    final next = verifiedIncoming;
+    verifiedIncoming = const [];
+    return next;
+  }
+
   @override
   Future<FieldIdentity> prepareIdentity() async =>
       const FieldIdentity(fingerprint: 'a', storage: 'test');
@@ -122,6 +132,7 @@ class FakeHostApi extends MeshHostApi {
   FakeHostApi(this.value);
 
   DeliveryInfo value;
+  List<VerifiedIncomingText> verifiedIncoming = const [];
 
   final bluetooth = BluetoothInfo(
     available: true,
@@ -184,6 +195,13 @@ class FakeHostApi extends MeshHostApi {
   Future<AwareInfo> stopAwareDiscovery() async => aware;
 
   @override
+  Future<List<VerifiedIncomingText>> drainVerifiedIncomingText() async {
+    final next = verifiedIncoming;
+    verifiedIncoming = const [];
+    return next;
+  }
+
+  @override
   Future<VoiceInfo> voiceInfo() async => voice;
 
   @override
@@ -225,7 +243,7 @@ void main() {
       final delivery = await sdk.sendText('  convoy listo  ');
       expect(delivery?.state, FieldDeliveryState.queued);
       expect(delivery?.logicalId, matches(RegExp(r'^[0-9a-f]{32}$')));
-      expect(gateway.lastText, 'convoy listo');
+      expect(gateway.lastText, startsWith('field-action-v1:'));
       expect(gateway.lastLogicalId, delivery?.logicalId);
     },
   );
@@ -424,6 +442,41 @@ void main() {
     },
   );
 
+  test(
+    'host gateway preserves native certified evidence without Pigeon DTOs',
+    () async {
+      final host =
+          FakeHostApi(
+              DeliveryInfo(
+                logicalId: '',
+                targetCount: 0,
+                deliveredCount: 0,
+                state: 'queued',
+              ),
+            )
+            ..verifiedIncoming = [
+              VerifiedIncomingText(
+                authorId: 'a' * 64,
+                objectId: 'b' * 64,
+                verifiedAtUnixSeconds: 1700000000,
+                body: 'field-action-v1:payload',
+              ),
+            ];
+      final gateway = MeshHostGateway(api: host);
+
+      final received = await gateway.drainVerifiedIncomingText();
+
+      expect(received, hasLength(1));
+      expect(received.single.authorId, 'a' * 64);
+      expect(received.single.objectId, 'b' * 64);
+      expect(
+        received.single.verifiedAt,
+        DateTime.fromMillisecondsSinceEpoch(1700000000000, isUtc: true),
+      );
+      expect(received.single.body, 'field-action-v1:payload');
+    },
+  );
+
   test('host gateway maps every public session capability', () async {
     const id = '0123456789abcdef0123456789abcdef';
     final gateway = MeshHostGateway(
@@ -498,7 +551,7 @@ void main() {
       final delivery = await sdk.sendLocation(location);
 
       expect(delivery, isNotNull);
-      expect(gateway.lastText, startsWith('field-location-v1:'));
+      expect(gateway.lastText, startsWith('field-action-v1:'));
       expect(
         await sdk.sendLocation(
           FieldLocation(
@@ -572,7 +625,7 @@ void main() {
       expect(session.aware.state, 'connected');
       expect(await sdk.sendText('mensaje por WFA'), isNotNull);
       expect(await sdk.sendLocation(location), isNotNull);
-      expect(gateway.lastText, startsWith('field-location-v1:'));
+      expect(gateway.lastText, startsWith('field-action-v1:'));
       expect(
         await sdk.sendVoice(
           Uint8List.fromList([1, 2, 3]),
@@ -624,4 +677,67 @@ void main() {
       expect(received.headingDegrees, location.headingDegrees);
     },
   );
+
+  test('outgoing product text seals its exact logical ID inside the encrypted payload', () async {
+    final gateway = FakeGateway()..secure = true;
+    final sdk = FieldMeshClient(gateway: gateway);
+    const logicalId = 'a47d6e8525f34ef6bb0102092f27d05c';
+
+    await sdk.sendTextWithLogicalId('  misma acción  ', logicalId);
+
+    final encoded = gateway.lastText.substring('field-action-v1:'.length);
+    final decoded = jsonDecode(
+      utf8.decode(base64Url.decode(base64Url.normalize(encoded))),
+    );
+    expect(decoded, {'id': logicalId, 'type': 'text', 'body': 'misma acción'});
+  });
+
+  test(
+    'verified incoming stream preserves certified native evidence',
+    () async {
+      final gateway = FakeGateway()
+        ..verifiedIncoming = [
+          FieldCertifiedPayload(
+            authorId: 'a' * 64,
+            objectId: 'b' * 64,
+            verifiedAt: DateTime.fromMillisecondsSinceEpoch(
+              1700000000000,
+              isUtc: true,
+            ),
+            body: 'field-action-v1:eyJpZCI6ImNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjIiwidHlwZSI6InRleHQiLCJib2R5IjoiYWNjaVx1MDBmM24gY2VydGlmaWNhZGEifQ',
+          ),
+        ];
+      final sdk = FieldMeshClient(gateway: gateway);
+      final event = await sdk
+          .watchVerifiedIncomingText(interval: const Duration(milliseconds: 1))
+          .first;
+      expect(event.authorId, 'a' * 64);
+      expect(event.objectId, 'b' * 64);
+      expect(event.logicalId, 'c' * 32);
+      expect(event.body, 'acción certificada');
+    },
+  );
+
+  test('verified incoming stream drops malformed host evidence', () async {
+    final gateway = FakeGateway()
+      ..verifiedIncoming = [
+        FieldCertifiedPayload(
+          authorId: 'a' * 64,
+          objectId: 'b' * 64,
+          verifiedAt: DateTime.fromMillisecondsSinceEpoch(
+            1700000000000,
+            isUtc: true,
+          ),
+          body: 'field-action-v1:not-base64',
+        ),
+      ];
+    final sdk = FieldMeshClient(gateway: gateway);
+    await expectLater(
+      sdk
+          .watchVerifiedIncomingText(interval: const Duration(milliseconds: 1))
+          .first
+          .timeout(const Duration(milliseconds: 10)),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
 }

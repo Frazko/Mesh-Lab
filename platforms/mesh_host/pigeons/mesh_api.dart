@@ -89,6 +89,22 @@ class BluetoothInfo {
   String detail;
 }
 
+/// A native-certified message revealed only after durable verification and a
+/// local receipt commit. The origin is the roster member from the signed
+/// object, never a radio address or product-provided field.
+class VerifiedIncomingText {
+  VerifiedIncomingText({
+    required this.authorId,
+    required this.objectId,
+    required this.verifiedAtUnixSeconds,
+    required this.body,
+  });
+  String authorId;
+  String objectId;
+  int verifiedAtUnixSeconds;
+  String body;
+}
+
 class VoiceInfo {
   VoiceInfo({
     required this.receivedCount,
@@ -175,6 +191,8 @@ abstract class MeshHostApi {
   bool sendText(String message, String logicalId);
   @async
   DeliveryInfo deliveryInfo(String logicalId);
+  @async
+  List<VerifiedIncomingText> drainVerifiedIncomingText();
   @async
   VoiceInfo voiceInfo();
   @async

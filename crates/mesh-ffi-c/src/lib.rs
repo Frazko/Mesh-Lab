@@ -571,14 +571,20 @@ pub const ROUTED_ACCEPTED_ANNOUNCEMENT: u8 = 1;
 pub const ROUTED_ACCEPTED_CHUNK: u8 = 2;
 pub const ROUTED_ACCEPTED_RECEIPT: u8 = 3;
 pub const ROUTED_ACCEPTED_RECEIPT_ACK: u8 = 4;
-const DELIVERED_TEXT_MAGIC: [u8; 2] = [0x74, 1];
+// Completion packets are only created after every chunk has verified and the
+// receipt transaction has committed. Version 2 deliberately carries the
+// certified origin and verification moment next to the opaque object ID so
+// product adapters never need to infer them from radio state.
+const DELIVERED_TEXT_MAGIC: [u8; 2] = [0x74, 2];
+const DELIVERED_TEXT_HEADER_BYTES: usize = 2 + 32 + 32 + 8 + 2;
 
 /// Private native-host completion packet. It is deliberately not a radio
-/// record: `{ magic, object id, receipt length, receipt, text length, text }`
-/// crosses only from the Rust store into the Android/iOS host after SQLCipher
+/// record: `{ magic v2, object id, signed origin, verified at, receipt length,
+/// receipt, text length, text }` crosses only from the Rust store into the
+/// Android/iOS host after SQLCipher
 /// has committed the local delivery and signed receipt.
 fn encode_delivered_text(
-    object: mesh_types::durable::ObjectId,
+    proof: &mesh_protocol::VerifiedDelivery,
     receipt: &[u8],
     text: &[u8],
 ) -> Result<Vec<u8>, Error> {
@@ -589,9 +595,14 @@ fn encode_delivered_text(
     {
         return Err(Error::InternalInvariant);
     }
-    let mut result = Vec::with_capacity(2 + 32 + 2 + receipt.len() + 2 + text.len());
+    let object = proof.object_id();
+    let origin = proof.origin();
+    let mut result =
+        Vec::with_capacity(DELIVERED_TEXT_HEADER_BYTES + receipt.len() + 2 + text.len());
     result.extend(DELIVERED_TEXT_MAGIC);
     result.extend(object.0);
+    result.extend(origin.0);
+    result.extend(proof.verified_at().to_be_bytes());
     result.extend((receipt.len() as u16).to_be_bytes());
     result.extend(receipt);
     result.extend((text.len() as u16).to_be_bytes());
@@ -656,7 +667,7 @@ pub fn secure_store_finalize_next_text(
         let receipt = store
             .finalize_received(&proof, &roster, &signer, now)
             .map_err(|_| Error::InternalInvariant)?;
-        encode_delivered_text(object, receipt.receipt(), proof.plaintext_after_commit())
+        encode_delivered_text(&proof, receipt.receipt(), proof.plaintext_after_commit())
     })
 }
 
@@ -3589,8 +3600,13 @@ mod tests {
         let delivered =
             secure_store_finalize_next_text(receiver, &[64; 32], &[65; 32], 102).unwrap();
         assert_eq!(&delivered[..2], &DELIVERED_TEXT_MAGIC);
-        let receipt_len = u16::from_be_bytes([delivered[34], delivered[35]]) as usize;
-        let text_start = 36 + receipt_len;
+        assert_eq!(&delivered[34..66], &owner_member);
+        assert_eq!(
+            u64::from_be_bytes(delivered[66..74].try_into().unwrap()),
+            102
+        );
+        let receipt_len = u16::from_be_bytes([delivered[74], delivered[75]]) as usize;
+        let text_start = 76 + receipt_len;
         let text_len =
             u16::from_be_bytes([delivered[text_start], delivered[text_start + 1]]) as usize;
         assert!(receipt_len > 64);
@@ -3669,8 +3685,8 @@ mod tests {
         }
         let delivered =
             secure_store_finalize_next_text(receiver, &[74; 32], &[75; 32], 102).unwrap();
-        let receipt_len = u16::from_be_bytes([delivered[34], delivered[35]]) as usize;
-        let text_at = 36 + receipt_len;
+        let receipt_len = u16::from_be_bytes([delivered[74], delivered[75]]) as usize;
+        let text_at = 76 + receipt_len;
         let payload_len = u16::from_be_bytes([delivered[text_at], delivered[text_at + 1]]) as usize;
         assert_eq!(&delivered[text_at + 2..text_at + 2 + payload_len], &voice);
         let receipt = secure_store_receipt_record(receiver, 0, 102).unwrap();
@@ -3764,8 +3780,8 @@ mod tests {
         }
         let delivered =
             secure_store_finalize_next_text(receiver, &[87; 32], &[88; 32], 104).unwrap();
-        let receipt_len = u16::from_be_bytes([delivered[34], delivered[35]]) as usize;
-        let payload_at = 36 + receipt_len;
+        let receipt_len = u16::from_be_bytes([delivered[74], delivered[75]]) as usize;
+        let payload_at = 76 + receipt_len;
         let payload_len =
             u16::from_be_bytes([delivered[payload_at], delivered[payload_at + 1]]) as usize;
         assert_eq!(

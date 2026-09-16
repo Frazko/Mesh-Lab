@@ -34,6 +34,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import java.util.UUID
+import java.util.ArrayDeque
 import java.io.File
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -45,6 +46,13 @@ import java.security.SecureRandom
 import java.util.concurrent.Executors
 
 /** BLE discovery, enrollment, and the protected GATT transport. */
+internal data class CertifiedIncomingText(
+    val authorId: String,
+    val objectId: String,
+    val verifiedAtUnixSeconds: Long,
+    val body: String,
+)
+
 internal class BluetoothAccess(
     private val context: Context,
     private val identity: SecureIdentity,
@@ -73,6 +81,11 @@ internal class BluetoothAccess(
     private var probes = 0L
     private var messages = 0L
     private var lastMessage = ""
+    // This queue is the only native-to-Dart path intended for product actions.
+    // Entries are appended strictly after Rust commits the receipt, and are
+    // drained atomically so concurrent messages cannot be collapsed into a
+    // mutable “last message” snapshot.
+    private val verifiedIncoming = ArrayDeque<CertifiedIncomingText>()
     // Text travels on the preferred local Wi-Fi link and, while available, the
     // authenticated BLE link as a second encrypted copy.  The small envelope
     // makes that redundancy invisible to the conversation history.
@@ -863,12 +876,20 @@ internal class BluetoothAccess(
 
     /** Presents a durable text only after native Rust has verified every
      * encrypted chunk and SQLCipher has committed its signed receipt. */
+    /** Parses completion packet v2 from Rust. The packet is created only after
+     * signature, roster, chunk, and receipt-commit verification. Do not
+     * convert malformed or legacy packets into product events. */
     private fun finalizeDurableText() {
         val packet = try { NativeRuntime.finalizeNextDurableText(identity.groupMaterial()) }
         catch (_: Exception) { return }
-        if (packet.size < 38 || packet[0] != 0x74.toByte() || packet[1] != 1.toByte()) return
-        val receiptLength = readU16(packet, 34)
-        val textLengthOffset = 36 + receiptLength
+        val headerBytes = 76
+        if (packet.size < headerBytes || packet[0] != 0x74.toByte() || packet[1] != 2.toByte()) return
+        val objectId = packet.copyOfRange(2, 34).joinToString("") { "%02x".format(it.toInt() and 255) }
+        val authorId = packet.copyOfRange(34, 66).joinToString("") { "%02x".format(it.toInt() and 255) }
+        val verifiedAt = readLong(packet, 66)
+        if (verifiedAt <= 0) return
+        val receiptLength = readU16(packet, 74)
+        val textLengthOffset = headerBytes + receiptLength
         if (textLengthOffset + 2 > packet.size) return
         val textLength = readU16(packet, textLengthOffset)
         val textOffset = textLengthOffset + 2
@@ -881,11 +902,21 @@ internal class BluetoothAccess(
             try { val folder = File(context.cacheDir, "mesh-voice").apply { mkdirs() }; val file = File(folder, "latest.m4a"); file.writeBytes(audio); lastVoiceFile = file; lastVoiceDurationMillis = duration.toLong(); receivedVoices++ } catch (_: Exception) { return }
             drainDurableReceiptOutbox(); return
         }
-        val text = payload.toString(Charsets.UTF_8)
+        val text = try { payload.toString(Charsets.UTF_8) } catch (_: Exception) { return }
         messages++
         lastMessage = text
-        Log.i(logTag, "Durable text committed locally")
+        synchronized(verifiedIncoming) {
+            if (verifiedIncoming.size == 64) verifiedIncoming.removeFirst()
+            verifiedIncoming.addLast(CertifiedIncomingText(authorId, objectId, verifiedAt, text))
+        }
+        Log.i(logTag, "Certified durable text committed locally")
         drainDurableReceiptOutbox()
+    }
+
+    fun drainVerifiedIncomingText(): List<CertifiedIncomingText> = synchronized(verifiedIncoming) {
+        buildList(verifiedIncoming.size) {
+            while (verifiedIncoming.isNotEmpty()) add(verifiedIncoming.removeFirst())
+        }
     }
 
     /** Drains a bounded durable source slice on every healthy direct edge.
@@ -1297,6 +1328,11 @@ internal class BluetoothAccess(
             ((bytes[offset + 2].toInt() and 255) shl 8) or (bytes[offset + 3].toInt() and 255)
     private fun readU16(bytes: ByteArray, offset: Int): Int =
         ((bytes[offset].toInt() and 255) shl 8) or (bytes[offset + 1].toInt() and 255)
+    private fun readLong(bytes: ByteArray, offset: Int): Long {
+        var value = 0L
+        for (index in offset until offset + 8) value = (value shl 8) or (bytes[index].toLong() and 255)
+        return value
+    }
     private fun writeInt(bytes: ByteArray, offset: Int, value: Int) {
         bytes[offset] = (value ushr 24).toByte(); bytes[offset + 1] = (value ushr 16).toByte()
         bytes[offset + 2] = (value ushr 8).toByte(); bytes[offset + 3] = value.toByte()

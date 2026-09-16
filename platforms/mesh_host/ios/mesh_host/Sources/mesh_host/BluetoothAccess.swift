@@ -3,6 +3,13 @@ import Foundation
 import AVFoundation
 
 /// BLE discovery, enrollment, and the protected GATT transport.
+struct CertifiedIncomingText {
+  let authorId: String
+  let objectId: String
+  let verifiedAtUnixSeconds: Int64
+  let body: String
+}
+
 final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralManagerDelegate, CBPeripheralDelegate {
   private let serviceUUID = CBUUID(string: "3C2865E0-1B51-49B4-9F22-4F15D5667761")
   private let rxUUID = CBUUID(string: "3C2865E1-1B51-49B4-9F22-4F15D5667761")
@@ -18,6 +25,9 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private var probes: Int64 = 0
   private var messages: Int64 = 0
   private var lastMessage = ""
+  // Product adapters drain this FIFO; unlike `lastMessage`, it cannot collapse
+  // a burst of already-certified durable deliveries into one mutable value.
+  private var verifiedIncoming = [CertifiedIncomingText]()
   private var recentTextIds = Set<UInt32>()
   private var recentTextOrder = [UInt32]()
   private var forwardedRelayFrames = [String: [UInt8]]()
@@ -422,12 +432,20 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   /// Native completion packet: plaintext is made visible only once all
   /// encrypted chunks verified and the local signed receipt is committed.
+  /// Parses completion packet v2 from Rust. It has no product-controlled
+  /// author field: every exported metadata value comes from the verified proof
+  /// after the receipt transaction has committed.
   private func finalizeDurableText() {
     guard let material = try? SecureIdentity().groupMaterial(),
           let packet = runtime({ try NativeRuntime.shared.finalizeNextDurableText(material: material) }),
-          packet.count >= 38, packet[0] == 0x74, packet[1] == 1 else { return }
-    let receiptLength = (Int(packet[34]) << 8) | Int(packet[35])
-    let textLengthOffset = 36 + receiptLength
+          packet.count >= 76, packet[0] == 0x74, packet[1] == 2 else { return }
+    let objectId = packet[2..<34].map { String(format: "%02x", $0) }.joined()
+    let authorId = packet[34..<66].map { String(format: "%02x", $0) }.joined()
+    var verifiedAt: Int64 = 0
+    for byte in packet[66..<74] { verifiedAt = (verifiedAt << 8) | Int64(byte) }
+    guard verifiedAt > 0 else { return }
+    let receiptLength = (Int(packet[74]) << 8) | Int(packet[75])
+    let textLengthOffset = 76 + receiptLength
     guard textLengthOffset + 2 <= packet.count else { return }
     let textLength = (Int(packet[textLengthOffset]) << 8) | Int(packet[textLengthOffset + 1])
     let textOffset = textLengthOffset + 2
@@ -443,8 +461,16 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     guard let text = String(bytes: payload, encoding: .utf8) else { return }
     messages += 1
     lastMessage = text
-    log("Durable text committed locally")
+    if verifiedIncoming.count == 64 { verifiedIncoming.removeFirst() }
+    verifiedIncoming.append(CertifiedIncomingText(authorId: authorId, objectId: objectId, verifiedAtUnixSeconds: verifiedAt, body: text))
+    log("Certified durable text committed locally")
     _ = drainDurableReceiptOutbox()
+  }
+
+  func drainVerifiedIncomingText() -> [CertifiedIncomingText] {
+    let result = verifiedIncoming
+    verifiedIncoming.removeAll(keepingCapacity: true)
+    return result
   }
 
   /// Starts each persisted source record across live authenticated edges.

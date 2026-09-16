@@ -477,6 +477,69 @@ class BluetoothInfo {
   }
 }
 
+/// A native-certified message revealed only after durable verification and a
+/// local receipt commit. The origin is the roster member from the signed
+/// object, never a radio address or product-provided field.
+class VerifiedIncomingText {
+  VerifiedIncomingText({
+    required this.authorId,
+    required this.objectId,
+    required this.verifiedAtUnixSeconds,
+    required this.body,
+  });
+
+  String authorId;
+
+  String objectId;
+
+  int verifiedAtUnixSeconds;
+
+  String body;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      authorId,
+      objectId,
+      verifiedAtUnixSeconds,
+      body,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static VerifiedIncomingText decode(Object result) {
+    result as List<Object?>;
+    return VerifiedIncomingText(
+      authorId: result[0]! as String,
+      objectId: result[1]! as String,
+      verifiedAtUnixSeconds: result[2]! as int,
+      body: result[3]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! VerifiedIncomingText || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(authorId, other.authorId) && _deepEquals(objectId, other.objectId) && _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && _deepEquals(body, other.body);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'VerifiedIncomingText(authorId: $authorId, objectId: $objectId, verifiedAtUnixSeconds: $verifiedAtUnixSeconds, body: $body)';
+  }
+}
+
 class VoiceInfo {
   VoiceInfo({
     required this.receivedCount,
@@ -702,14 +765,17 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is BluetoothInfo) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is VoiceInfo) {
+    }    else if (value is VerifiedIncomingText) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is DeliveryInfo) {
+    }    else if (value is VoiceInfo) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is AwareInfo) {
+    }    else if (value is DeliveryInfo) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is AwareInfo) {
+      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -732,10 +798,12 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134:
         return BluetoothInfo.decode(readValue(buffer)!);
       case 135:
-        return VoiceInfo.decode(readValue(buffer)!);
+        return VerifiedIncomingText.decode(readValue(buffer)!);
       case 136:
-        return DeliveryInfo.decode(readValue(buffer)!);
+        return VoiceInfo.decode(readValue(buffer)!);
       case 137:
+        return DeliveryInfo.decode(readValue(buffer)!);
+      case 138:
         return AwareInfo.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1077,6 +1145,25 @@ class MeshHostApi {
     )
     ;
     return pigeonVar_replyValue! as DeliveryInfo;
+  }
+
+  Future<List<VerifiedIncomingText>> drainVerifiedIncomingText() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<VerifiedIncomingText>();
   }
 
   Future<VoiceInfo> voiceInfo() async {

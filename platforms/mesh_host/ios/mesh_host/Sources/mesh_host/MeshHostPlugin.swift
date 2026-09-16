@@ -124,6 +124,19 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
     if Thread.isMainThread { return bluetooth.sendText(message, logicalId: logicalId) }
     return DispatchQueue.main.sync { bluetooth.sendText(message, logicalId: logicalId) }
   }
+  func drainVerifiedIncomingText() async throws -> [VerifiedIncomingText] {
+    onMain {
+      self.bluetooth.drainVerifiedIncomingText().map { event in
+        VerifiedIncomingText(
+          authorId: event.authorId,
+          objectId: event.objectId,
+          verifiedAtUnixSeconds: event.verifiedAtUnixSeconds,
+          body: event.body
+        )
+      }
+    }
+  }
+
   func deliveryInfo(logicalId: String) async throws -> DeliveryInfo {
     try await execute {
       guard let requested = BluetoothAccess.decodeLogicalId(logicalId) else { throw NativeFailure.status(1) }

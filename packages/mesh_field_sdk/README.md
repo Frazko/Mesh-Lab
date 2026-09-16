@@ -36,7 +36,17 @@ entrega. `sendText` y `sendLocation` devuelven un ID lógico y `delivery(id)`
 refresca `queued`, `partial`, `delivered` o `expired`. `FieldLocation` lleva
 coordenadas, precisión, hora y orientación opcional del vehículo en grados;
 una orientación nula significa que el teléfono no pudo obtenerla con confianza.
-`watchIncoming` entrega texto o ubicación recibida después de la suscripción.
+`watchIncoming` entrega texto o ubicación recibida para una interfaz de producto.
+
+Para una integración que debe atribuir y reconciliar acciones, el cliente
+implementa la capacidad opcional `FieldMeshVerifiedIncomingSource`.
+`watchVerifiedIncomingText` drena una cola FIFO nativa de texto durable que
+incluye origen de roster, ID de objeto y momento de verificación. Cada entrada
+se publica únicamente después de verificar todos los chunks y confirmar el
+receipt local; el SDK vuelve a validar formato y descarta evidencia malformada.
+El ID lógico de una aplicación todavía debe viajar en un sobre de producto
+cifrado antes de que una aplicación pueda correlacionar una acción entrante con
+su propio outbox.
 No expone objetos cifrados, receipts, identidades de destinatarios, rutas, IP
 ni claves. La presencia global y el rastreo continuo en segundo plano siguen
 fuera del SDK porque requieren una política de producto y validación física.

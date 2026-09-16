@@ -1033,6 +1033,11 @@ impl VerifiedDelivery {
     pub fn object_id(&self) -> ObjectId {
         self.announcement.manifest.id()
     }
+    /// Certified origin of the durable object. This is distinct from
+    /// [member], which is the local recipient whose delivery key was used.
+    pub fn origin(&self) -> MemberId {
+        self.announcement.manifest().origin()
+    }
     pub fn member(&self) -> MemberId {
         self.member
     }

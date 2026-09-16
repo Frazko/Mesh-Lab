@@ -323,6 +323,16 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
         return info
     }
     override suspend fun sendText(message: String, logicalId: String): Boolean = bluetooth.sendText(message, logicalId)
+    override suspend fun drainVerifiedIncomingText(): List<VerifiedIncomingText> =
+        bluetooth.drainVerifiedIncomingText().map { event ->
+            VerifiedIncomingText(
+                event.authorId,
+                event.objectId,
+                event.verifiedAtUnixSeconds,
+                event.body,
+            )
+        }
+
     override suspend fun deliveryInfo(logicalId: String): DeliveryInfo = withContext(NativeRuntime.dispatcher) {
         val requested = logicalId.takeIf { it.matches(Regex("[0-9a-f]{32}")) }
             ?.let { value -> ByteArray(16) { index -> value.substring(index * 2, index * 2 + 2).toInt(16).toByte() } }

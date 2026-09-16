@@ -504,6 +504,60 @@ struct BluetoothInfo: Hashable, CustomStringConvertible {
   }
 }
 
+/// A native-certified message revealed only after durable verification and a
+/// local receipt commit. The origin is the roster member from the signed
+/// object, never a radio address or product-provided field.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct VerifiedIncomingText: Hashable, CustomStringConvertible {
+  var authorId: String
+  var objectId: String
+  var verifiedAtUnixSeconds: Int64
+  var body: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> VerifiedIncomingText? {
+    let authorId = pigeonVar_list[0] as! String
+    let objectId = pigeonVar_list[1] as! String
+    let verifiedAtUnixSeconds = pigeonVar_list[2] as! Int64
+    let body = pigeonVar_list[3] as! String
+
+    return VerifiedIncomingText(
+      authorId: authorId,
+      objectId: objectId,
+      verifiedAtUnixSeconds: verifiedAtUnixSeconds,
+      body: body
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      authorId,
+      objectId,
+      verifiedAtUnixSeconds,
+      body,
+    ]
+  }
+  static func == (lhs: VerifiedIncomingText, rhs: VerifiedIncomingText) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return MeshApiPigeonInternal.deepEquals(lhs.authorId, rhs.authorId) && MeshApiPigeonInternal.deepEquals(lhs.objectId, rhs.objectId) && MeshApiPigeonInternal.deepEquals(lhs.verifiedAtUnixSeconds, rhs.verifiedAtUnixSeconds) && MeshApiPigeonInternal.deepEquals(lhs.body, rhs.body)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("VerifiedIncomingText")
+    MeshApiPigeonInternal.deepHash(value: authorId, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: objectId, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: verifiedAtUnixSeconds, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: body, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "VerifiedIncomingText(authorId: \(String(describing: authorId)), objectId: \(String(describing: objectId)), verifiedAtUnixSeconds: \(String(describing: verifiedAtUnixSeconds)), body: \(String(describing: body)))"
+  }
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct VoiceInfo: Hashable, CustomStringConvertible {
   var receivedCount: Int64
@@ -691,10 +745,12 @@ private class MeshApiPigeonCodecReader: FlutterStandardReader {
     case 134:
       return BluetoothInfo.fromList(self.readValue() as! [Any?])
     case 135:
-      return VoiceInfo.fromList(self.readValue() as! [Any?])
+      return VerifiedIncomingText.fromList(self.readValue() as! [Any?])
     case 136:
-      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+      return VoiceInfo.fromList(self.readValue() as! [Any?])
     case 137:
+      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+    case 138:
       return AwareInfo.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -722,14 +778,17 @@ private class MeshApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? BluetoothInfo {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? VoiceInfo {
+    } else if let value = value as? VerifiedIncomingText {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? DeliveryInfo {
+    } else if let value = value as? VoiceInfo {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? AwareInfo {
+    } else if let value = value as? DeliveryInfo {
       super.writeByte(137)
+      super.writeValue(value.toList())
+    } else if let value = value as? AwareInfo {
+      super.writeByte(138)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -771,6 +830,7 @@ protocol MeshHostApi {
   func stopAwareDiscovery() async throws -> AwareInfo
   func sendText(message: String, logicalId: String) async throws -> Bool
   func deliveryInfo(logicalId: String) async throws -> DeliveryInfo
+  func drainVerifiedIncomingText() async throws -> [VerifiedIncomingText]
   func voiceInfo() async throws -> VoiceInfo
   func sendVoice(audio: FlutterStandardTypedData, durationMillis: Int64, logicalId: String) async throws -> Bool
   func playLastVoice() async throws -> Bool
@@ -1049,6 +1109,21 @@ class MeshHostApiSetup {
       }
     } else {
       deliveryInfoChannel.setMessageHandler(nil)
+    }
+    let drainVerifiedIncomingTextChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingText\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      drainVerifiedIncomingTextChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            let result = try await api.drainVerifiedIncomingText()
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      drainVerifiedIncomingTextChannel.setMessageHandler(nil)
     }
     let voiceInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.voiceInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

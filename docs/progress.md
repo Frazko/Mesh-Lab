@@ -1,10 +1,14 @@
 # Avance del plan
 
-Estado vigente: 2026-09-14. **60% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-16. **61% global estimado · 90% Wi‑Fi Aware.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
 
 ## Entrega agregada por conversación
+
+### C2 — eventos entrantes certificados para adaptadores de producto
+
+**Actualizado: 2026-09-16. C2 local: 50%; gate operativo: pendiente.** El completion packet Rust cambió a v2 y contiene el ID de objeto, el **origen firmado** del manifest —no el receptor que firmó el receipt— y el instante de verificación. Sólo se serializa tras validar roster, firma, todos los chunks y confirmar el receipt local. Android e iOS validan el encuadre y guardan texto en una FIFO de hasta 64 entradas; Pigeon la drena como `VerifiedIncomingText`, de modo que una ráfaga no se pierda detrás de `lastMessage`. `mesh_field_sdk` 0.2.2 expone la capacidad opcional `FieldMeshVerifiedIncomingSource`; vuelve a comprobar hexadecimal, hora y cuerpo antes de entregar cada evento. Rust aprobó 28 pruebas de `mesh-ffi-c` y `mesh-protocol`; el SDK aprobó 20 y análisis limpio; el laboratorio aprobó 26 y análisis limpio. El SDK también sella su ID lógico en el payload durable cifrado y lo valida al recibir, por lo que texto/ubicación pueden correlacionarse sin confiar en metadatos de radio. En la rama de Convoy, el adaptador transforma la cola en `NearbyMeshIncomingAction`, recupera el UUID v4 exacto y rechaza SDKs sin la capacidad certificada; no toca aún el chat, mapa, PTT ni Supabase. Falta prueba extremo a extremo con hosts Android/iOS, extender la cola certificada a voz y conectar el reducer/outbox deduplicado de Convoy. Por eso C2 no está cerrado y el global sólo asciende a 61%.
 
 ## Guardrail WFA de la fachada SDK
 

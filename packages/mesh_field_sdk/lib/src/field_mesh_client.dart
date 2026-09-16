@@ -15,6 +15,23 @@ FieldDeliveryState _deliveryState(String value) => switch (value) {
   _ => throw StateError('Unexpected native delivery state'),
 };
 
+/// Completion payload supplied by the native host. It is kept internal to the
+/// adapter; an app receives [FieldVerifiedIncomingText] only after the SDK
+/// validates its encrypted product envelope too.
+final class FieldCertifiedPayload {
+  const FieldCertifiedPayload({
+    required this.authorId,
+    required this.objectId,
+    required this.verifiedAt,
+    required this.body,
+  });
+
+  final String authorId;
+  final String objectId;
+  final DateTime verifiedAt;
+  final String body;
+}
+
 /// Narrow native boundary that can be substituted in product tests without a
 /// Flutter channel or a physical radio.
 abstract interface class FieldMeshGateway {
@@ -31,6 +48,7 @@ abstract interface class FieldMeshGateway {
   Future<FieldVoiceStatus> voiceStatus();
   Future<bool> sendText(String message, String logicalId);
   Future<FieldDelivery?> delivery(String logicalId);
+  Future<List<FieldCertifiedPayload>> drainVerifiedIncomingText();
   Future<bool> sendVoice(Uint8List audio, int durationMillis, String logicalId);
   Future<bool> playLastVoice();
 }
@@ -102,6 +120,22 @@ final class MeshHostGateway implements FieldMeshGateway {
   Future<FieldAwareStatus> stopAwareDiscovery() async =>
       _aware(await _api.stopAwareDiscovery());
   @override
+  Future<List<FieldCertifiedPayload>> drainVerifiedIncomingText() async =>
+      (await _api.drainVerifiedIncomingText())
+          .map(
+            (value) => FieldCertifiedPayload(
+              authorId: value.authorId,
+              objectId: value.objectId,
+              verifiedAt: DateTime.fromMillisecondsSinceEpoch(
+                value.verifiedAtUnixSeconds * 1000,
+                isUtc: true,
+              ),
+              body: value.body,
+            ),
+          )
+          .toList(growable: false);
+
+  @override
   Future<FieldVoiceStatus> voiceStatus() async =>
       _voice(await _api.voiceInfo());
   @override
@@ -130,9 +164,15 @@ final class MeshHostGateway implements FieldMeshGateway {
 }
 
 /// Reusable client for Convoy and other product applications.
-final class FieldMeshClient implements FieldMeshSdk, FieldMeshActionSender {
+final class FieldMeshClient
+    implements
+        FieldMeshSdk,
+        FieldMeshActionSender,
+        FieldMeshVerifiedIncomingSource {
   FieldMeshClient({FieldMeshGateway? gateway})
     : _gateway = gateway ?? MeshHostGateway();
+
+  static const _actionPrefix = 'field-action-v1:';
 
   final FieldMeshGateway _gateway;
   final Random _random = Random.secure();
@@ -190,7 +230,8 @@ final class FieldMeshClient implements FieldMeshSdk, FieldMeshActionSender {
       return null;
     }
     final actionId = _actionId(logicalId);
-    if (actionId == null || !await _gateway.sendText(body, actionId)) {
+    if (actionId == null ||
+        !await _gateway.sendText(_encodeAction(body, actionId), actionId)) {
       return null;
     }
     return await delivery(actionId) ??
@@ -328,6 +369,63 @@ final class FieldMeshClient implements FieldMeshSdk, FieldMeshActionSender {
     }
   }
 
+  @override
+  Stream<FieldVerifiedIncomingText> watchVerifiedIncomingText({
+    Duration interval = const Duration(seconds: 1),
+  }) async* {
+    if (interval <= Duration.zero) {
+      throw ArgumentError.value(interval, 'interval', 'must be positive');
+    }
+    while (true) {
+      final events = await _gateway.drainVerifiedIncomingText();
+      for (final event in events) {
+        final certified = _decodeCertifiedAction(event);
+        if (certified != null) yield certified;
+      }
+      await Future<void>.delayed(interval);
+    }
+  }
+
+  FieldVerifiedIncomingText? _decodeCertifiedAction(
+    FieldCertifiedPayload event,
+  ) {
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(event.authorId) ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(event.objectId) ||
+        event.verifiedAt.millisecondsSinceEpoch <= 0 ||
+        !event.body.startsWith(_actionPrefix)) {
+      return null;
+    }
+    try {
+      final raw = utf8.decode(
+        base64Url.decode(
+          base64Url.normalize(event.body.substring(_actionPrefix.length)),
+        ),
+      );
+      final value = jsonDecode(raw);
+      if (value is! Map<String, dynamic> ||
+          value.length != 3 ||
+          value['type'] != 'text' ||
+          value['id'] is! String ||
+          value['body'] is! String ||
+          !RegExp(r'^[0-9a-f]{32}$').hasMatch(value['id'] as String) ||
+          (value['body'] as String).isEmpty) {
+        return null;
+      }
+      return FieldVerifiedIncomingText(
+        authorId: event.authorId,
+        objectId: event.objectId,
+        logicalId: value['id'] as String,
+        verifiedAt: event.verifiedAt,
+        body: value['body'] as String,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  String _encodeAction(String body, String logicalId) =>
+      '$_actionPrefix${base64UrlEncode(utf8.encode(jsonEncode({'id': logicalId, 'type': 'text', 'body': body})))}';
+
   FieldSessionStatus _session(
     FieldBluetoothStatus bluetooth,
     FieldAwareStatus aware,
@@ -363,6 +461,28 @@ final class FieldMeshClient implements FieldMeshSdk, FieldMeshActionSender {
       a.bluetooth.receivedMessages == b.bluetooth.receivedMessages;
 
   FieldIncomingEvent _incoming(String payload) {
+    if (payload.startsWith(_actionPrefix)) {
+      try {
+        final value = jsonDecode(
+          utf8.decode(
+            base64Url.decode(
+              base64Url.normalize(payload.substring(_actionPrefix.length)),
+            ),
+          ),
+        );
+        if (value is Map<String, dynamic> &&
+            value.length == 3 &&
+            value['type'] == 'text' &&
+            value['id'] is String &&
+            value['body'] is String &&
+            RegExp(r'^[0-9a-f]{32}$').hasMatch(value['id'] as String)) {
+          return _incoming(value['body'] as String);
+        }
+      } on FormatException {
+        // Keep malformed product payload opaque to the UI path.
+      }
+      return FieldIncomingText(body: payload);
+    }
     const prefix = 'field-location-v1:';
     if (!payload.startsWith(prefix)) return FieldIncomingText(body: payload);
     try {

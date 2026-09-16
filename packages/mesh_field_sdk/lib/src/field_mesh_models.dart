@@ -95,6 +95,32 @@ final class FieldIncomingText extends FieldIncomingEvent {
   final String body;
 }
 
+/// Native-certified durable text. These fields are emitted only after the
+/// host commits a receipt for the signed object; product code must use this
+/// stream, rather than a UI “last message”, for reconciliation.
+final class FieldVerifiedIncomingText {
+  const FieldVerifiedIncomingText({
+    required this.authorId,
+    required this.objectId,
+    required this.logicalId,
+    required this.verifiedAt,
+    required this.body,
+  });
+
+  /// Certified group member, lowercase hexadecimal (32 bytes).
+  final String authorId;
+
+  /// Certified durable object ID, lowercase hexadecimal (32 bytes).
+  final String objectId;
+
+  /// Product action ID, carried inside the durable encrypted payload.
+  final String logicalId;
+
+  /// The native verification time, captured by the signed-delivery verifier.
+  final DateTime verifiedAt;
+  final String body;
+}
+
 final class FieldIncomingLocation extends FieldIncomingEvent {
   const FieldIncomingLocation({required this.location});
 
@@ -205,4 +231,14 @@ abstract interface class FieldMeshActionSender {
     Duration duration,
     String logicalId,
   );
+}
+
+/// Optional stream for adapters that need authenticated incoming actions.
+///
+/// Existing product integrations can continue to use [FieldMeshSdk]; Convoy
+/// uses this capability and rejects non-certified incoming text.
+abstract interface class FieldMeshVerifiedIncomingSource {
+  Stream<FieldVerifiedIncomingText> watchVerifiedIncomingText({
+    Duration interval,
+  });
 }
