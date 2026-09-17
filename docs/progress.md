@@ -1194,9 +1194,11 @@ bloquea si la radio está ausente. Se añadió control de ciclo de vida de los d
 flujos certificados para que una fuente de voz o texto terminada no deje una
 suscripción de producto abierta.
 
-Pasaron las **82** pruebas de `test/features/nearby_mesh`, incluidas pruebas
-funcionales de recepción de voz, sellado, reproducción por ID privado y
-proyección al historial de audio. La cobertura medida de los módulos
+Pasaron las **84** pruebas de `test/features/nearby_mesh` y la burbuja de
+voz de Convoy, incluidas pruebas funcionales de recepción de voz, sellado,
+reproducción por ID privado, proyección al historial y un segundo toque que no
+simula detener el reproductor nativo. Las líneas nuevas del widget mesh están
+cubiertas; su cobertura total incluye ramas heredadas de URL y almacenamiento. La cobertura medida de los módulos
 modificados fue: repositorio 130/134 (**97.0%**), codec 40/41 (**97.6%**),
 proyector 22/22 (**100%**) y controlador 121/126 (**96.0%**). `flutter
 analyze --no-fatal-infos` no reportó errores. Dos invocaciones Release Android
