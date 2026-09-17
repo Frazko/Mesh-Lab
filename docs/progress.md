@@ -1194,13 +1194,15 @@ bloquea si la radio está ausente. Se añadió control de ciclo de vida de los d
 flujos certificados para que una fuente de voz o texto terminada no deje una
 suscripción de producto abierta.
 
-Pasaron las **86** pruebas de `test/features/nearby_mesh` y la burbuja de
+Pasaron las **87** pruebas de `test/features/nearby_mesh` y la burbuja de
 voz de Convoy, incluidas pruebas funcionales de recepción de voz, sellado,
 reproducción por ID privado, proyección al historial y un segundo toque que no
 simula detener el reproductor nativo. El nuevo servicio puro
 `ConvoyMeshVoiceMirror` separa del outbox el límite de duración, los bytes y la
 identidad inmutable: sus pruebas exigen que una nota conserve el UUID, convoy,
-autor y duración, y que audio vacío o mayor de ocho segundos no inicie radio.
+autor y duración, que audio vacío o mayor de ocho segundos no inicie radio y
+que un error de la radio devuelva control al outbox de Internet sin propagar un
+fallo de entrega.
 Las líneas nuevas del widget mesh están cubiertas; su cobertura total incluye
 ramas heredadas de URL y almacenamiento. La cobertura medida de los módulos
 modificados fue: repositorio 130/134 (**97.0%**), codec 40/41 (**97.6%**),
