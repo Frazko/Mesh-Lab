@@ -1199,6 +1199,7 @@ funcionales de recepción de voz, sellado, reproducción por ID privado y
 proyección al historial de audio. La cobertura medida de los módulos
 modificados fue: repositorio 130/134 (**97.0%**), codec 40/41 (**97.6%**),
 proyector 22/22 (**100%**) y controlador 121/126 (**96.0%**). `flutter
-analyze --no-fatal-infos` no reportó errores. La compilación Release Android
-está en curso y no se instaló ningún paquete. Sigue pendiente la prueba física
+analyze --no-fatal-infos` no reportó errores. Dos invocaciones Release Android
+solapadas de Gradle se cancelaron sin artefacto ni instalación; la compilación
+se repetirá de forma aislada. Sigue pendiente la prueba física
 de dos notas de voz fuera de orden y de su reproducción individual por ID.
