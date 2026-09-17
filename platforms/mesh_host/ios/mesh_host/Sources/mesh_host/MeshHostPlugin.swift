@@ -145,7 +145,8 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
           objectId: event.objectId,
           logicalId: event.logicalId,
           verifiedAtUnixSeconds: event.verifiedAtUnixSeconds,
-          durationMillis: event.durationMillis
+          durationMillis: event.durationMillis,
+          context: event.context
         )
       }
     }
@@ -170,6 +171,10 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
   func sendVoice(audio: FlutterStandardTypedData, durationMillis: Int64, logicalId: String) async throws -> Bool {
     if Thread.isMainThread { return bluetooth.sendVoice(Array(audio.data), durationMillis: durationMillis, logicalId: logicalId) }
     return DispatchQueue.main.sync { bluetooth.sendVoice(Array(audio.data), durationMillis: durationMillis, logicalId: logicalId) }
+  }
+  func sendVoiceWithContext(audio: FlutterStandardTypedData, durationMillis: Int64, logicalId: String, context: String) async throws -> Bool {
+    if Thread.isMainThread { return bluetooth.sendVoiceWithContext(Array(audio.data), durationMillis: durationMillis, logicalId: logicalId, context: context) }
+    return DispatchQueue.main.sync { bluetooth.sendVoiceWithContext(Array(audio.data), durationMillis: durationMillis, logicalId: logicalId, context: context) }
   }
   func playLastVoice() async throws -> Bool {
     if Thread.isMainThread { return bluetooth.playLastVoice() }

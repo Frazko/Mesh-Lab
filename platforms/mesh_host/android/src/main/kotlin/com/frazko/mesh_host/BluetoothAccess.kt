@@ -61,6 +61,7 @@ internal data class CertifiedIncomingVoice(
     val logicalId: String,
     val verifiedAtUnixSeconds: Long,
     val durationMillis: Long,
+    val context: String,
 )
 
 internal class BluetoothAccess(
@@ -906,10 +907,21 @@ internal class BluetoothAccess(
         val textOffset = textLengthOffset + 2
         if (textLength == 0 || textOffset + textLength != packet.size) return
         val payload = packet.copyOfRange(textOffset, packet.size)
-        if (payload.size >= durableVoiceHeaderBytes && payload[0] == voiceMarker && payload[1] == durableVoiceVersion) {
+        if (payload.size >= durableVoiceHeaderBytes && payload[0] == voiceMarker &&
+            (payload[1] == durableVoiceVersion || payload[1] == durableVoiceContextVersion)) {
             val duration = readInt(payload, 2).toLong()
             val logicalId = payload.copyOfRange(6, 22).joinToString("") { "%02x".format(it.toInt() and 255) }
-            val audio = payload.copyOfRange(durableVoiceHeaderBytes, payload.size)
+            val contextOffset = durableVoiceHeaderBytes
+            val contextLength = if (payload[1] == durableVoiceContextVersion) {
+                if (payload.size < durableVoiceContextHeaderBytes) return
+                readU16(payload, contextOffset)
+            } else 0
+            val audioOffset = if (payload[1] == durableVoiceContextVersion) contextOffset + 2 + contextLength else contextOffset
+            if (contextLength > maxVoiceContextBytes || audioOffset >= payload.size) return
+            val productContext = if (contextLength == 0) "" else try {
+                payload.copyOfRange(contextOffset + 2, audioOffset).toString(Charsets.UTF_8)
+            } catch (_: Exception) { return }
+            val audio = payload.copyOfRange(audioOffset, payload.size)
             if (duration !in 1..maxVoiceDurationMillis || !logicalId.matches(Regex("[0-9a-f]{32}")) || audio.isEmpty() || audio.size > maxVoiceBytes) return
             try {
                 val folder = File(context.cacheDir, "mesh-voice").apply { mkdirs() }
@@ -919,7 +931,7 @@ internal class BluetoothAccess(
                 lastVoiceDurationMillis = duration
                 receivedVoices++
                 if (verifiedIncomingVoice.size == 64) verifiedIncomingVoice.removeFirst()
-                verifiedIncomingVoice.addLast(CertifiedIncomingVoice(authorId, objectId, logicalId, verifiedAt, duration))
+                verifiedIncomingVoice.addLast(CertifiedIncomingVoice(authorId, objectId, logicalId, verifiedAt, duration, productContext))
             } catch (_: Exception) { return }
             drainDurableReceiptOutbox(); return
         }
@@ -1227,20 +1239,35 @@ internal class BluetoothAccess(
     }
 
     /** Encoded AAC/M4A only. PCM never crosses the Flutter boundary or BLE link. */
-    @Synchronized fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean {
+    @Synchronized fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean =
+        sendVoiceInternal(audio, durationMillis, logicalId, context = null)
+
+    /** Product context is encrypted inside the same signed durable object as the
+     * audio. It is bounded before allocation and never used for host routing. */
+    @Synchronized fun sendVoiceWithContext(audio: ByteArray, durationMillis: Long, logicalId: String, context: String): Boolean =
+        sendVoiceInternal(audio, durationMillis, logicalId, context)
+
+    private fun sendVoiceInternal(audio: ByteArray, durationMillis: Long, logicalId: String, context: String?): Boolean {
         if (audio.isEmpty() || audio.size > maxVoiceBytes || durationMillis !in 1..maxVoiceDurationMillis) return false
         val id = decodeLogicalId(logicalId) ?: return false
-        val durable = ByteArray(durableVoiceHeaderBytes + audio.size)
+        val contextBytes = context?.toByteArray(Charsets.UTF_8)
+        if (contextBytes != null && (contextBytes.isEmpty() || contextBytes.size > maxVoiceContextBytes)) return false
+        val headerBytes = if (contextBytes == null) durableVoiceHeaderBytes else durableVoiceContextHeaderBytes + contextBytes.size
+        // The durable object, not just AAC bytes, is limited by the shared
+        // SQLCipher record ceiling.
+        if (headerBytes + audio.size > maxVoiceBytes) return false
+        val durable = ByteArray(headerBytes + audio.size)
         durable[0] = voiceMarker
-        durable[1] = durableVoiceVersion
+        durable[1] = if (contextBytes == null) durableVoiceVersion else durableVoiceContextVersion
         writeInt(durable, 2, durationMillis.toInt())
         id.copyInto(durable, 6)
-        audio.copyInto(durable, durableVoiceHeaderBytes)
+        if (contextBytes != null) {
+            writeU16(durable, durableVoiceHeaderBytes, contextBytes.size)
+            contextBytes.copyInto(durable, durableVoiceContextHeaderBytes)
+        }
+        audio.copyInto(durable, headerBytes)
         val queued = try { NativeRuntime.enqueueDurableText(identity.groupMaterial(), durable, id) } catch (_: Exception) { return false }
         if (queued <= 0) return false
-        // Never fall back to the legacy RAM-only voice packets. A successful
-        // user action means the encrypted object is already in SQLCipher and
-        // can survive a radio loss before the first neighbor accepts it.
         drainDurableOriginOutbox()
         return true
     }
@@ -1452,7 +1479,10 @@ internal class BluetoothAccess(
         const val enrollmentPolicy = 0xf3
         const val voiceMarker: Byte = 0x56
         const val durableVoiceVersion: Byte = 2
+        const val durableVoiceContextVersion: Byte = 3
         const val durableVoiceHeaderBytes = 22
+        const val durableVoiceContextHeaderBytes = 24
+        const val maxVoiceContextBytes = 512
         const val textMarker: Byte = 0x7f
         const val receiptMarker: Byte = 0x7e
         const val heartbeatMarker: Byte = 0x7d

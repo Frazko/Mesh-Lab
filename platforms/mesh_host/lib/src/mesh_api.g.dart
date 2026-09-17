@@ -550,6 +550,7 @@ class VerifiedIncomingVoice {
     required this.logicalId,
     required this.verifiedAtUnixSeconds,
     required this.durationMillis,
+    required this.context,
   });
 
   String authorId;
@@ -562,6 +563,8 @@ class VerifiedIncomingVoice {
 
   int durationMillis;
 
+  String context;
+
   List<Object?> _toList() {
     return <Object?>[
       authorId,
@@ -569,6 +572,7 @@ class VerifiedIncomingVoice {
       logicalId,
       verifiedAtUnixSeconds,
       durationMillis,
+      context,
     ];
   }
 
@@ -583,6 +587,7 @@ class VerifiedIncomingVoice {
       logicalId: result[2]! as String,
       verifiedAtUnixSeconds: result[3]! as int,
       durationMillis: result[4]! as int,
+      context: result[5]! as String,
     );
   }
 
@@ -595,7 +600,7 @@ class VerifiedIncomingVoice {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(authorId, other.authorId) && _deepEquals(objectId, other.objectId) && _deepEquals(logicalId, other.logicalId) && _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && _deepEquals(durationMillis, other.durationMillis);
+    return _deepEquals(authorId, other.authorId) && _deepEquals(objectId, other.objectId) && _deepEquals(logicalId, other.logicalId) && _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && _deepEquals(durationMillis, other.durationMillis) && _deepEquals(context, other.context);
   }
 
   @override
@@ -604,7 +609,7 @@ class VerifiedIncomingVoice {
 
   @override
   String toString() {
-    return 'VerifiedIncomingVoice(authorId: $authorId, objectId: $objectId, logicalId: $logicalId, verifiedAtUnixSeconds: $verifiedAtUnixSeconds, durationMillis: $durationMillis)';
+    return 'VerifiedIncomingVoice(authorId: $authorId, objectId: $objectId, logicalId: $logicalId, verifiedAtUnixSeconds: $verifiedAtUnixSeconds, durationMillis: $durationMillis, context: $context)';
   }
 }
 
@@ -1285,6 +1290,25 @@ class MeshHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[audio, durationMillis, logicalId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
+  }
+
+  Future<bool> sendVoiceWithContext(Uint8List audio, int durationMillis, String logicalId, String context) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.sendVoiceWithContext$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[audio, durationMillis, logicalId, context]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(

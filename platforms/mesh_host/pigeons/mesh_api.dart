@@ -115,12 +115,14 @@ class VerifiedIncomingVoice {
     required this.logicalId,
     required this.verifiedAtUnixSeconds,
     required this.durationMillis,
+    required this.context,
   });
   String authorId;
   String objectId;
   String logicalId;
   int verifiedAtUnixSeconds;
   int durationMillis;
+  String context;
 }
 
 class VoiceInfo {
@@ -217,6 +219,8 @@ abstract class MeshHostApi {
   VoiceInfo voiceInfo();
   @async
   bool sendVoice(Uint8List audio, int durationMillis, String logicalId);
+  @async
+  bool sendVoiceWithContext(Uint8List audio, int durationMillis, String logicalId, String context);
   @async
   bool playLastVoice();
   @async

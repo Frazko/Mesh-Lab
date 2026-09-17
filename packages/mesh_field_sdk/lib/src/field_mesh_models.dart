@@ -130,6 +130,7 @@ final class FieldVerifiedIncomingVoice {
     required this.logicalId,
     required this.verifiedAt,
     required this.duration,
+    required this.context,
   });
 
   final String authorId;
@@ -137,6 +138,9 @@ final class FieldVerifiedIncomingVoice {
   final String logicalId;
   final DateTime verifiedAt;
   final Duration duration;
+
+  /// Product-defined encrypted context, bounded to 512 UTF-8 bytes by host.
+  final String context;
 }
 
 final class FieldIncomingLocation extends FieldIncomingEvent {
@@ -264,6 +268,18 @@ abstract interface class FieldMeshVerifiedIncomingSource {
 /// Optional voice capability. A voice is exposed only after native durable
 /// verification and receipt commit; products cannot access a file path or raw
 /// audio bytes for incoming notes.
+/// Optional sender for applications that need an authenticated product envelope
+/// attached to voice. The context travels within the same encrypted durable
+/// object as the audio and is returned only after certified receipt commit.
+abstract interface class FieldMeshVoiceContextSender {
+  Future<FieldDelivery?> sendVoiceWithLogicalIdAndContext(
+    Uint8List audio,
+    Duration duration,
+    String logicalId,
+    String context,
+  );
+}
+
 abstract interface class FieldMeshVerifiedIncomingVoiceSource {
   Stream<FieldVerifiedIncomingVoice> watchVerifiedIncomingVoice({
     Duration interval,

@@ -1150,3 +1150,25 @@ nuevas/modificadas: `field_mesh_client.dart` 293/312 (93.9%) y
 paquete. Sigue pendiente la prueba física Android↔iOS con dos voces recibidas
 fuera de orden y la adaptación de la nota certificada a la conversación de
 Convoy; por ello no se aumenta el global.
+
+## SDK — contexto cifrado de voz para productos
+
+**Actualizado: 2026-09-16. Avance global: 64%; bloque SDK–Convoy: 89%; Wi‑Fi Aware: 90%.**
+
+Una voz certificada ahora puede transportar un contexto de producto de hasta
+512 bytes dentro del mismo objeto durable cifrado y firmado. El formato v3
+preserva autor, objeto, ID lógico, instante, duración y contexto tras el commit
+local de receipt; el formato v2 previo sigue siendo legible sin contexto. El
+host no interpreta ese contenido para rutas, radio o autorización. Android e
+iOS rechazan contexto vacío, UTF‑8 inválido, tamaños fuera de límite y objetos
+que excedan el techo SQLCipher antes de crear la cola o escribir audio.
+
+`FieldMeshVoiceContextSender` permite que Convoy adjunte su sobre de alcance a
+una voz y `FieldMeshVerifiedIncomingVoiceSource` lo devuelve sólo tras la
+verificación nativa. Pasaron 26 pruebas del SDK, análisis Flutter limpio,
+reproducibilidad Pigeon y cobertura de `field_mesh_client.dart` 302/323
+(93.5%) y `field_mesh_models.dart` 17/17 (100%). Las compilaciones Release
+Android e iOS aprobaron sin instalar ni abrir paquetes. El siguiente bloque
+adapta la nota a la conversación/lector de Convoy preservando el reproductor
+privado por ID de objeto; sigue pendiente la prueba física de dos voces fuera
+de orden.

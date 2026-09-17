@@ -24,6 +24,7 @@ final class FieldCertifiedVoicePayload {
     required this.logicalId,
     required this.verifiedAt,
     required this.duration,
+    required this.context,
   });
 
   final String authorId;
@@ -31,6 +32,7 @@ final class FieldCertifiedVoicePayload {
   final String logicalId;
   final DateTime verifiedAt;
   final Duration duration;
+  final String context;
 }
 
 /// Completion payload supplied by the native host. It is kept internal to the
@@ -69,6 +71,12 @@ abstract interface class FieldMeshGateway {
   Future<List<FieldCertifiedPayload>> drainVerifiedIncomingText();
   Future<List<FieldCertifiedVoicePayload>> drainVerifiedIncomingVoice();
   Future<bool> sendVoice(Uint8List audio, int durationMillis, String logicalId);
+  Future<bool> sendVoiceWithContext(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+    String context,
+  );
   Future<bool> playLastVoice();
   Future<bool> playVoice(String objectId);
 }
@@ -168,6 +176,7 @@ final class MeshHostGateway implements FieldMeshGateway {
                 isUtc: true,
               ),
               duration: Duration(milliseconds: value.durationMillis),
+              context: value.context,
             ),
           )
           .toList(growable: false);
@@ -197,6 +206,13 @@ final class MeshHostGateway implements FieldMeshGateway {
     String logicalId,
   ) => _api.sendVoice(audio, durationMillis, logicalId);
   @override
+  Future<bool> sendVoiceWithContext(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+    String context,
+  ) => _api.sendVoiceWithContext(audio, durationMillis, logicalId, context);
+  @override
   Future<bool> playLastVoice() => _api.playLastVoice();
   @override
   Future<bool> playVoice(String objectId) => _api.playVoice(objectId);
@@ -207,6 +223,7 @@ final class FieldMeshClient
     implements
         FieldMeshSdk,
         FieldMeshActionSender,
+        FieldMeshVoiceContextSender,
         FieldMeshVerifiedIncomingSource,
         FieldMeshVerifiedIncomingVoiceSource {
   FieldMeshClient({FieldMeshGateway? gateway})
@@ -339,10 +356,19 @@ final class FieldMeshClient
     String logicalId,
   ) => _sendVoice(audio, duration, logicalId: logicalId);
 
+  @override
+  Future<FieldDelivery?> sendVoiceWithLogicalIdAndContext(
+    Uint8List audio,
+    Duration duration,
+    String logicalId,
+    String context,
+  ) => _sendVoice(audio, duration, logicalId: logicalId, context: context);
+
   Future<FieldDelivery?> _sendVoice(
     Uint8List audio,
     Duration duration, {
     String? logicalId,
+    String? context,
   }) async {
     if (audio.isEmpty ||
         duration <= Duration.zero ||
@@ -350,8 +376,18 @@ final class FieldMeshClient
       return null;
     }
     final actionId = _actionId(logicalId);
+    final contextBytes = context == null ? null : utf8.encode(context);
     if (actionId == null ||
-        !await _gateway.sendVoice(audio, duration.inMilliseconds, actionId)) {
+        (contextBytes != null &&
+            (contextBytes.isEmpty || contextBytes.length > 512)) ||
+        !(context == null
+            ? await _gateway.sendVoice(audio, duration.inMilliseconds, actionId)
+            : await _gateway.sendVoiceWithContext(
+                audio,
+                duration.inMilliseconds,
+                actionId,
+                context,
+              ))) {
       return null;
     }
     return await delivery(actionId) ??
@@ -459,7 +495,8 @@ final class FieldMeshClient
         !RegExp(r'^[0-9a-f]{32}$').hasMatch(event.logicalId) ||
         event.verifiedAt.millisecondsSinceEpoch <= 0 ||
         event.duration <= Duration.zero ||
-        event.duration > const Duration(seconds: 8)) {
+        event.duration > const Duration(seconds: 8) ||
+        utf8.encode(event.context).length > 512) {
       return null;
     }
     return FieldVerifiedIncomingVoice(
@@ -468,6 +505,7 @@ final class FieldMeshClient
       logicalId: event.logicalId,
       verifiedAt: event.verifiedAt,
       duration: event.duration,
+      context: event.context,
     );
   }
 

@@ -341,6 +341,7 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
                 event.logicalId,
                 event.verifiedAtUnixSeconds,
                 event.durationMillis,
+                event.context,
             )
         }
 
@@ -363,6 +364,8 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
     override suspend fun voiceInfo(): VoiceInfo = bluetooth.voiceInfo()
     override suspend fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean =
         bluetooth.sendVoice(audio, durationMillis, logicalId)
+    override suspend fun sendVoiceWithContext(audio: ByteArray, durationMillis: Long, logicalId: String, context: String): Boolean =
+        bluetooth.sendVoiceWithContext(audio, durationMillis, logicalId, context)
     override suspend fun playLastVoice(): Boolean = bluetooth.playLastVoice()
     override suspend fun playVoice(objectId: String): Boolean = bluetooth.playVoice(objectId)
     override suspend fun engineInfo(): EngineInfo = execute {

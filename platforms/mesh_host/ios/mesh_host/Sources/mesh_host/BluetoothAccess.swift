@@ -18,6 +18,7 @@ struct CertifiedIncomingVoice {
   let logicalId: String
   let verifiedAtUnixSeconds: Int64
   let durationMillis: Int64
+  let context: String
 }
 
 final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralManagerDelegate, CBPeripheralDelegate {
@@ -85,7 +86,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private let enrollmentPolicy: UInt8 = 0xf3
   private let voiceMarker: UInt8 = 0x56
   private let durableVoiceVersion: UInt8 = 2
+  private let durableVoiceContextVersion: UInt8 = 3
   private let durableVoiceHeaderBytes = 22
+  private let durableVoiceContextHeaderBytes = 24
+  private let maxVoiceContextBytes = 512
   private let textMarker: UInt8 = 0x7f
   private let receiptMarker: UInt8 = 0x7e
   private let heartbeatMarker: UInt8 = 0x7d
@@ -464,13 +468,24 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     let textOffset = textLengthOffset + 2
     guard textLength > 0, textOffset + textLength == packet.count else { return }
     let payload = Array(packet[textOffset..<packet.count])
-    if payload.count >= durableVoiceHeaderBytes, payload[0] == voiceMarker, payload[1] == durableVoiceVersion {
+    if payload.count >= durableVoiceHeaderBytes, payload[0] == voiceMarker,
+       payload[1] == durableVoiceVersion || payload[1] == durableVoiceContextVersion {
       let duration = (Int64(payload[2]) << 24) | (Int64(payload[3]) << 16) | (Int64(payload[4]) << 8) | Int64(payload[5])
       let logicalId = payload[6..<22].map { String(format: "%02x", $0) }.joined()
-      let audio = Array(payload.dropFirst(durableVoiceHeaderBytes))
+      let contextLength: Int
+      if payload[1] == durableVoiceContextVersion {
+        guard payload.count >= durableVoiceContextHeaderBytes else { return }
+        contextLength = (Int(payload[22]) << 8) | Int(payload[23])
+      } else {
+        contextLength = 0
+      }
+      let audioOffset = payload[1] == durableVoiceContextVersion ? durableVoiceContextHeaderBytes + contextLength : durableVoiceHeaderBytes
+      guard contextLength <= maxVoiceContextBytes, audioOffset < payload.count else { return }
+      let context = contextLength == 0 ? "" : String(bytes: payload[durableVoiceContextHeaderBytes..<audioOffset], encoding: .utf8)
+      let audio = Array(payload.dropFirst(audioOffset))
       guard duration > 0, duration <= maxVoiceDurationMillis,
             logicalId.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil,
-            !audio.isEmpty, audio.count <= maxVoiceBytes else { return }
+            context != nil, !audio.isEmpty, audio.count <= maxVoiceBytes else { return }
       do {
         let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
           .appendingPathComponent("mesh-voice", isDirectory: true)
@@ -481,7 +496,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
         lastVoiceDurationMillis = duration
         receivedVoices += 1
         if verifiedIncomingVoice.count == 64 { verifiedIncomingVoice.removeFirst() }
-        verifiedIncomingVoice.append(CertifiedIncomingVoice(authorId: authorId, objectId: objectId, logicalId: logicalId, verifiedAtUnixSeconds: verifiedAt, durationMillis: duration))
+        verifiedIncomingVoice.append(CertifiedIncomingVoice(authorId: authorId, objectId: objectId, logicalId: logicalId, verifiedAtUnixSeconds: verifiedAt, durationMillis: duration, context: context!))
         _ = drainDurableReceiptOutbox()
       } catch { }
       return
@@ -723,17 +738,37 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   /// The app hands us an AAC/M4A file. Raw PCM is never sent through Dart or BLE.
   func sendVoice(_ audio: [UInt8], durationMillis: Int64, logicalId: String) -> Bool {
+    sendVoiceInternal(audio, durationMillis: durationMillis, logicalId: logicalId, context: nil)
+  }
+
+  /// Product context is encrypted inside the durable signed object. It is
+  /// bounded before allocation and has no effect on routing or authorization.
+  func sendVoiceWithContext(_ audio: [UInt8], durationMillis: Int64, logicalId: String, context: String) -> Bool {
+    sendVoiceInternal(audio, durationMillis: durationMillis, logicalId: logicalId, context: context)
+  }
+
+  private func sendVoiceInternal(_ audio: [UInt8], durationMillis: Int64, logicalId: String, context: String?) -> Bool {
     guard !audio.isEmpty, audio.count <= maxVoiceBytes,
           durationMillis > 0, durationMillis <= maxVoiceDurationMillis else { return false }
     guard let logical = Self.decodeLogicalId(logicalId) else { return false }
+    let contextBytes = context.map { Array($0.utf8) }
+    guard contextBytes == nil || (!(contextBytes?.isEmpty ?? true) && contextBytes!.count <= maxVoiceContextBytes) else { return false }
     guard durationMillis <= Int64(UInt32.max), let material = try? SecureIdentity().groupMaterial() else { return false }
-    let durable: [UInt8] = [voiceMarker, durableVoiceVersion,
-      UInt8((durationMillis >> 24) & 0xff), UInt8((durationMillis >> 16) & 0xff),
-      UInt8((durationMillis >> 8) & 0xff), UInt8(durationMillis & 0xff)] + logical + audio
+    let header: [UInt8]
+    if let contextBytes {
+      header = [voiceMarker, durableVoiceContextVersion,
+        UInt8((durationMillis >> 24) & 0xff), UInt8((durationMillis >> 16) & 0xff),
+        UInt8((durationMillis >> 8) & 0xff), UInt8(durationMillis & 0xff)] + logical +
+        [UInt8((contextBytes.count >> 8) & 0xff), UInt8(contextBytes.count & 0xff)] + contextBytes
+    } else {
+      header = [voiceMarker, durableVoiceVersion,
+        UInt8((durationMillis >> 24) & 0xff), UInt8((durationMillis >> 16) & 0xff),
+        UInt8((durationMillis >> 8) & 0xff), UInt8(durationMillis & 0xff)] + logical
+    }
+    guard header.count + audio.count <= maxVoiceBytes else { return false }
+    let durable = header + audio
     guard let queued = runtime({ try NativeRuntime.shared.enqueueDurableText(durable, logicalId: logical, material: material) }),
           queued > 0 else { return false }
-    // A radio write is deliberately never used as a fallback: only the
-    // persisted, encrypted outbox may represent an accepted voice action.
     _ = drainDurableOriginOutbox()
     return true
   }

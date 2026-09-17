@@ -575,7 +575,8 @@ data class VerifiedIncomingVoice (
   val objectId: String,
   val logicalId: String,
   val verifiedAtUnixSeconds: Long,
-  val durationMillis: Long
+  val durationMillis: Long,
+  val context: String
 )
  {
   companion object {
@@ -585,7 +586,8 @@ data class VerifiedIncomingVoice (
       val logicalId = pigeonVar_list[2] as String
       val verifiedAtUnixSeconds = pigeonVar_list[3] as Long
       val durationMillis = pigeonVar_list[4] as Long
-      return VerifiedIncomingVoice(authorId, objectId, logicalId, verifiedAtUnixSeconds, durationMillis)
+      val context = pigeonVar_list[5] as String
+      return VerifiedIncomingVoice(authorId, objectId, logicalId, verifiedAtUnixSeconds, durationMillis, context)
     }
   }
   fun toList(): List<Any?> {
@@ -595,6 +597,7 @@ data class VerifiedIncomingVoice (
       logicalId,
       verifiedAtUnixSeconds,
       durationMillis,
+      context,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -605,7 +608,7 @@ data class VerifiedIncomingVoice (
       return true
     }
     val other = other as VerifiedIncomingVoice
-    return MeshApiPigeonUtils.deepEquals(this.authorId, other.authorId) && MeshApiPigeonUtils.deepEquals(this.objectId, other.objectId) && MeshApiPigeonUtils.deepEquals(this.logicalId, other.logicalId) && MeshApiPigeonUtils.deepEquals(this.verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && MeshApiPigeonUtils.deepEquals(this.durationMillis, other.durationMillis)
+    return MeshApiPigeonUtils.deepEquals(this.authorId, other.authorId) && MeshApiPigeonUtils.deepEquals(this.objectId, other.objectId) && MeshApiPigeonUtils.deepEquals(this.logicalId, other.logicalId) && MeshApiPigeonUtils.deepEquals(this.verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && MeshApiPigeonUtils.deepEquals(this.durationMillis, other.durationMillis) && MeshApiPigeonUtils.deepEquals(this.context, other.context)
   }
 
   override fun hashCode(): Int {
@@ -615,10 +618,11 @@ data class VerifiedIncomingVoice (
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.logicalId)
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.verifiedAtUnixSeconds)
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.durationMillis)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.context)
     return result
   }
   override fun toString(): String {
-    return "VerifiedIncomingVoice(authorId=$authorId, objectId=$objectId, logicalId=$logicalId, verifiedAtUnixSeconds=$verifiedAtUnixSeconds, durationMillis=$durationMillis)"
+    return "VerifiedIncomingVoice(authorId=$authorId, objectId=$objectId, logicalId=$logicalId, verifiedAtUnixSeconds=$verifiedAtUnixSeconds, durationMillis=$durationMillis, context=$context)"
   }
 }
 
@@ -926,6 +930,7 @@ interface MeshHostApi {
   suspend fun drainVerifiedIncomingVoice(): List<VerifiedIncomingVoice>
   suspend fun voiceInfo(): VoiceInfo
   suspend fun sendVoice(audio: ByteArray, durationMillis: Long, logicalId: String): Boolean
+  suspend fun sendVoiceWithContext(audio: ByteArray, durationMillis: Long, logicalId: String, context: String): Boolean
   suspend fun playLastVoice(): Boolean
   suspend fun playVoice(objectId: String): Boolean
   suspend fun subscribe(cursor: Long): EngineSnapshot
@@ -1302,6 +1307,28 @@ interface MeshHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.sendVoice(audioArg, durationMillisArg, logicalIdArg))
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.sendVoiceWithContext$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val audioArg = args[0] as ByteArray
+            val durationMillisArg = args[1] as Long
+            val logicalIdArg = args[2] as String
+            val contextArg = args[3] as String
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.sendVoiceWithContext(audioArg, durationMillisArg, logicalIdArg, contextArg))
               } catch (exception: Throwable) {
                 MeshApiPigeonUtils.wrapError(exception)
               }

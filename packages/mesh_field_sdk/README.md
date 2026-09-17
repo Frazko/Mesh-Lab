@@ -42,9 +42,10 @@ Para una integración que debe atribuir y reconciliar acciones, el cliente
 implementa las capacidades opcionales `FieldMeshVerifiedIncomingSource` y
 `FieldMeshVerifiedIncomingVoiceSource`. Sus colas FIFO nativas contienen sólo
 objetos durables verificados tras todos los chunks y el receipt local. La voz
-incluye origen de roster, ID de objeto, ID lógico, instante y duración;
-`playVerifiedVoice(objectId)` reproduce el archivo privado correspondiente sin
-entregar bytes ni una ruta al producto. El SDK vuelve a validar formato y
+incluye origen de roster, ID de objeto, ID lógico, instante, duración y un
+contexto de producto de hasta 512 bytes; `FieldMeshVoiceContextSender` lo sella
+junto al audio. `playVerifiedVoice(objectId)` reproduce el archivo privado
+correspondiente sin entregar bytes ni una ruta al producto. El SDK vuelve a validar formato y
 descarta evidencia malformada. El ID lógico de una aplicación viaja dentro del
 payload cifrado, antes de que una aplicación pueda correlacionar una acción
 entrante con su propio outbox.

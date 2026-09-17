@@ -137,6 +137,17 @@ class FakeGateway implements FieldMeshGateway {
   }
 
   @override
+  Future<bool> sendVoiceWithContext(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+    String context,
+  ) async {
+    lastVoiceLogicalId = logicalId;
+    return acceptVoice;
+  }
+
+  @override
   Future<FieldVoiceStatus> voiceStatus() async => voice;
 }
 
@@ -235,6 +246,14 @@ class FakeHostApi extends MeshHostApi {
     Uint8List audio,
     int durationMillis,
     String logicalId,
+  ) async => true;
+
+  @override
+  Future<bool> sendVoiceWithContext(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+    String context,
   ) async => true;
 
   @override
@@ -519,6 +538,7 @@ void main() {
                 logicalId: 'c' * 32,
                 verifiedAtUnixSeconds: 1700000000,
                 durationMillis: 2500,
+                context: 'convoy-mesh-action-v1:trusted',
               ),
             ];
       final gateway = MeshHostGateway(api: host);
@@ -809,6 +829,7 @@ void main() {
             logicalId: 'c' * 32,
             verifiedAt: DateTime.utc(2026, 9, 16, 12),
             duration: const Duration(seconds: 3),
+            context: 'convoy-mesh-action-v1:trusted',
           ),
         ]
         ..playableVoice = true;
@@ -828,6 +849,34 @@ void main() {
   );
 
   test(
+    'preserves bounded encrypted voice context with the logical ID',
+    () async {
+      const id = '0123456789abcdef0123456789abcdef';
+      final gateway = FakeGateway()..secure = true;
+      final sdk = FieldMeshClient(gateway: gateway);
+
+      final delivery = await sdk.sendVoiceWithLogicalIdAndContext(
+        Uint8List.fromList([1, 2]),
+        const Duration(seconds: 1),
+        id,
+        'convoy-mesh-action-v1:trusted',
+      );
+
+      expect(delivery?.logicalId, id);
+      expect(gateway.lastVoiceLogicalId, id);
+      expect(
+        await sdk.sendVoiceWithLogicalIdAndContext(
+          Uint8List.fromList([1]),
+          const Duration(seconds: 1),
+          id,
+          'x' * 513,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'fails closed for malformed or out-of-policy certified voice metadata',
     () async {
       final gateway = FakeGateway()
@@ -838,6 +887,7 @@ void main() {
             logicalId: 'broken',
             verifiedAt: DateTime.utc(2026, 9, 16, 12),
             duration: const Duration(seconds: 3),
+            context: 'convoy-mesh-action-v1:trusted',
           ),
           FieldCertifiedVoicePayload(
             authorId: 'a' * 64,
@@ -845,6 +895,7 @@ void main() {
             logicalId: 'c' * 32,
             verifiedAt: DateTime.utc(2026, 9, 16, 12),
             duration: const Duration(seconds: 9),
+            context: '',
           ),
         ];
       final sdk = FieldMeshClient(gateway: gateway);
