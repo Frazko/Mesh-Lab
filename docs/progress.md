@@ -1172,3 +1172,33 @@ Android e iOS aprobaron sin instalar ni abrir paquetes. El siguiente bloque
 adapta la nota a la conversación/lector de Convoy preservando el reproductor
 privado por ID de objeto; sigue pendiente la prueba física de dos voces fuera
 de orden.
+
+## Integración Convoy — voz certificada privada
+
+**Actualizado: 2026-09-16. Avance global: 64%; bloque SDK–Convoy: 90%; Wi‑Fi Aware: 90%.**
+
+Convoy ya adapta una nota de voz certificada al historial existente sólo cuando
+el sobre cifrado declara el convoy activo, el autor Field coincide con la
+inscripción confiable y el usuario aún pertenece a la sesión. La burbuja
+conserva el UUID lógico de Convoy, duración y el ID de objeto certificado; no
+recibe bytes, ruta local ni URL. Al tocar reproducir, solicita al SDK que el
+host nativo privado reproduzca exclusivamente ese ID. Texto y GPS conservan
+su flujo actual, y un sobre que diga `voice` sin objeto certificado —o un
+objeto de voz con otro tipo de sobre— se descarta.
+
+La salida toma los bytes mientras el grabador aún posee el temporal y, si la
+nota dura de uno a ocho segundos, la refleja como segundo canal usando el
+mismo UUID que el outbox de Internet. El host recibe el audio y el sobre
+sellado juntos; la subida a Supabase continúa siendo independiente y no se
+bloquea si la radio está ausente. Se añadió control de ciclo de vida de los dos
+flujos certificados para que una fuente de voz o texto terminada no deje una
+suscripción de producto abierta.
+
+Pasaron las **82** pruebas de `test/features/nearby_mesh`, incluidas pruebas
+funcionales de recepción de voz, sellado, reproducción por ID privado y
+proyección al historial de audio. La cobertura medida de los módulos
+modificados fue: repositorio 130/134 (**97.0%**), codec 40/41 (**97.6%**),
+proyector 22/22 (**100%**) y controlador 121/126 (**96.0%**). `flutter
+analyze --no-fatal-infos` no reportó errores. La compilación Release Android
+está en curso y no se instaló ningún paquete. Sigue pendiente la prueba física
+de dos notas de voz fuera de orden y de su reproducción individual por ID.
