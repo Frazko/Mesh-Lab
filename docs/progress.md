@@ -1207,8 +1207,9 @@ Las líneas nuevas del widget mesh están cubiertas; su cobertura total incluye
 ramas heredadas de URL y almacenamiento. La cobertura medida de los módulos
 modificados fue: repositorio 130/134 (**97.0%**), codec 40/41 (**97.6%**),
 proyector 22/22 (**100%**), controlador 121/126 (**96.0%**) y mirror 6/6
-(**100%**). `flutter analyze --no-fatal-infos` no reportó errores. Dos
-invocaciones Release Android solapadas de Gradle se cancelaron sin artefacto ni
-instalación; la compilación se repetirá de forma aislada. Sigue pendiente la
-prueba física de dos notas de voz fuera de orden y de su reproducción individual
-por ID.
+(**100%**). `flutter analyze --no-fatal-infos` no reportó errores. Tres
+invocaciones Release Android de Gradle se cancelaron sin artefacto ni
+instalación; la última quedó esperando un daemon Gradle compartido que ya estaba
+ocupado, así que se detuvo sin afectar ese proceso. La compilación se repetirá
+cuando el daemon esté libre. Sigue pendiente la prueba física de dos notas de
+voz fuera de orden y de su reproducción individual por ID.
