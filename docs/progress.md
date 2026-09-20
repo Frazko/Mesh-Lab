@@ -6,7 +6,7 @@ La tabla inicial conserva la línea base del plan; las secciones fechadas poster
 
 ## C3 — admisión automática gobernada por Convoy
 
-**Actualizado: 2026-09-20. C3 local: 64%; gate operativo: pendiente.** La
+**Actualizado: 2026-09-20. C3 local: 70%; gate operativo: pendiente.** La
 autoridad de producto aprobada es el **líder actual del convoy**: el creador
 comienza como líder y crea la autoridad inicial, pero esa propiedad no queda
 atada de forma permanente a su teléfono. Antes de que el host emita una
@@ -35,6 +35,24 @@ existentes pueden mantener su enlace durante el cambio, pero la admisión debe
 detenerse y una nueva época debe ser emitida por el nuevo líder antes de aceptar
 miembros. No se cuenta como cerrada hasta que esa migración tenga protocolo,
 backend y prueba física.
+
+### SEC-05 — separación de grupos de producto
+
+**Actualizado: 2026-09-20. Implementación local: 84%; gate operativo: pendiente.**
+Cada `convoyId` UUID se normaliza a un scope de 128 bits, privado del host y
+nunca anunciado por Bluetooth ni Wi-Fi Aware. Al configurar el roster, el SDK
+lo cruza con ese scope y Android/iOS abren exclusivamente
+`mesh-store/<scope>/state-v1.db`, una base SQLCipher distinta por convoy. Al
+pasar de A a B, Convoy detiene la sesión cercana y limpia la política A antes
+de solicitar B; los hosts cierran además enlaces Bluetooth y sockets directos
+Aware antes de liberar el almacén cifrado. El almacenamiento A permanece
+cifrado para auditoría y una futura decisión de reingreso, pero no puede ser
+el grupo radio activo de B. La prueba de integración Convoy A→B valida la
+secuencia salida→limpieza→nuevo grupo y que ambos scopes generan grupos
+independientes; las 29 pruebas del SDK validan propagación/forma del scope y
+su rechazo si no es hexadecimal de 32 caracteres. Falta la compilación nativa
+completa y una campaña física que cambie de convoy con Bluetooth y Aware
+conectados; hasta entonces SEC-05 no se marca como cierre operativo.
 
 ## Entrega agregada por conversación
 

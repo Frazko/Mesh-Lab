@@ -82,10 +82,25 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
   }
   func configureEnrollmentAccess(policy: EnrollmentAccessPolicy) async throws {
     let members = Set(policy.authorizedMemberIds.map { $0.lowercased() })
-    let valid = members.count == policy.authorizedMemberIds.count && members.count <= 50 &&
+    let valid = policy.scopeId.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil &&
+      members.count == policy.authorizedMemberIds.count && members.count <= 50 &&
       members.allSatisfy { $0.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil }
     guard valid else {
       throw PigeonError(code: "INVALID_ENROLLMENT_ROSTER", message: "La lista autorizada de la Malla no es válida.", details: nil)
+    }
+    let scopeChanged = try await execute {
+      try NativeRuntime.shared.productScopeWillChange(policy.scopeId)
+    }
+    // A product scope is a hard boundary. No Bluetooth or Aware link may keep
+    // its former authenticated session after the encrypted Field store moves.
+    if scopeChanged {
+      onMain {
+        _ = bluetooth.stopDiscovery()
+        _ = aware.stop(hasGroup: false)
+      }
+    }
+    try await execute {
+      try NativeRuntime.shared.selectProductScope(policy.scopeId, material: try SecureIdentity().storeMaterial())
     }
     onMain {
       bluetooth.setEnrollmentAllowedMembers(
@@ -95,7 +110,14 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
     }
   }
   func clearEnrollmentAccess() async throws {
-    onMain { bluetooth.setEnrollmentAllowedMembers(nil) }
+    // Clearing product authority also closes every direct link before its
+    // cryptographic store is released.
+    onMain {
+      _ = bluetooth.stopDiscovery()
+      _ = aware.stop(hasGroup: false)
+      bluetooth.setEnrollmentAllowedMembers(nil)
+    }
+    try await execute { NativeRuntime.shared.clearProductScope() }
   }
   func bluetoothInfo() async throws -> BluetoothInfo {
     if Thread.isMainThread { return bluetooth.info() }

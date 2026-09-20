@@ -69,9 +69,15 @@ class GroupInfo {
 /// verifies the request signature before comparing it with this roster.
 class EnrollmentAccessPolicy {
   EnrollmentAccessPolicy({
+    required this.scopeId,
     required this.authorizedMemberIds,
     required this.authorityEnabled,
   });
+
+  /// Opaque, product-owned 128-bit scope. It selects a separate encrypted
+  /// Field store so policies from two product groups cannot share a radio
+  /// group merely because they use the same phone identity.
+  String scopeId;
   List<String> authorizedMemberIds;
   bool authorityEnabled;
 }
@@ -236,7 +242,12 @@ abstract class MeshHostApi {
   @async
   bool sendVoice(Uint8List audio, int durationMillis, String logicalId);
   @async
-  bool sendVoiceWithContext(Uint8List audio, int durationMillis, String logicalId, String context);
+  bool sendVoiceWithContext(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+    String context,
+  );
   @async
   bool playLastVoice();
   @async

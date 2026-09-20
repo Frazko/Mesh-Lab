@@ -9,6 +9,8 @@ final class NativeRuntime {
   private var handle: UInt64 = 0
   private var storeHandle: UInt64 = 0
   private var relayGate: UInt64 = 0
+  private let labScope = "lab"
+  private var storeScope = "lab"
   var hasStore: Bool { storeHandle != 0 }
 
   func request(method: UInt8, argument: Int64 = 0) throws -> [UInt8] {
@@ -36,6 +38,7 @@ final class NativeRuntime {
     let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                            appropriateFor: nil, create: true)
     var directory = root.appendingPathComponent("mesh-store", isDirectory: true)
+      .appendingPathComponent(storeScope, isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
     var values = URLResourceValues(); values.isExcludedFromBackup = true
@@ -55,19 +58,65 @@ final class NativeRuntime {
     storeHandle = opened
   }
 
+  private func releaseStore() {
+    dispatchPrecondition(condition: .onQueue(queue))
+    if storeHandle != 0 {
+      _ = mesh_secure_store_release(storeHandle)
+      storeHandle = 0
+    }
+    if relayGate != 0 {
+      _ = mesh_relay_gate_release(relayGate)
+      relayGate = 0
+    }
+  }
+
+  func productScopeWillChange(_ scope: String) throws -> Bool {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard scope.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil else {
+      throw NativeFailure.status(1)
+    }
+    return scope != storeScope
+  }
+
+  /// Uses an encrypted store selected by an opaque product scope. A previous
+  /// Convoy group remains isolated on disk and cannot become the active radio
+  /// group for a later convoy.
+  func selectProductScope(_ scope: String, material rawMaterial: SecureStoreMaterial) throws {
+    dispatchPrecondition(condition: .onQueue(queue))
+    var material = rawMaterial
+    defer { material.wipe() }
+    guard scope.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil else {
+      throw NativeFailure.status(1)
+    }
+    if storeScope == scope && storeHandle != 0 {
+      return
+    }
+    releaseStore()
+    storeScope = scope
+    try prepareStore(material)
+  }
+
+  /// Returning to the lab scope closes the former product radio policy. The
+  /// encrypted product database stays available only under its original scope
+  /// for local audit/rejoin decisions made by the product.
+  func clearProductScope() {
+    dispatchPrecondition(condition: .onQueue(queue))
+    releaseStore()
+    storeScope = labScope
+  }
+
   /// This lab has one Android authority. If an iPhone still carries a group
   /// created during an earlier failed setup, discard only the encrypted policy
   /// database and reopen it with the same Keychain-backed identity. The
   /// identity itself is deliberately never reset.
   func resetPolicyForLab() throws {
     dispatchPrecondition(condition: .onQueue(queue))
-    if storeHandle != 0 {
-      _ = mesh_secure_store_release(storeHandle)
-      storeHandle = 0
-    }
+    releaseStore()
+    storeScope = labScope
     let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                            appropriateFor: nil, create: true)
     let database = root.appendingPathComponent("mesh-store", isDirectory: true)
+      .appendingPathComponent(labScope, isDirectory: true)
       .appendingPathComponent("state-v1.db")
     for suffix in ["", "-wal", "-shm"] {
       try? FileManager.default.removeItem(atPath: database.path + suffix)

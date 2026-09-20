@@ -534,6 +534,9 @@ internal class WifiAwareAccess(
     @Synchronized fun stop(): AwareInfo {
         requested = false
         retry?.let { handler.removeCallbacks(it) }; retry = null; attaching = false
+        // Closing discovery alone leaves existing data paths alive. A product
+        // scope transition must tear down those authenticated sockets too.
+        closeDirectLinks()
         publisher?.close(); subscriber?.close(); session?.close()
         publisher = null; subscriber = null; session = null; activeTag = null; peers.clear()
         detail = "Wi‑Fi Aware detenido por el usuario."

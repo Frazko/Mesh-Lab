@@ -443,19 +443,27 @@ data class GroupInfo (
  * Generated class from Pigeon that represents data sent in messages.
  */
 data class EnrollmentAccessPolicy (
+  /**
+   * Opaque, product-owned 128-bit scope. It selects a separate encrypted
+   * Field store so policies from two product groups cannot share a radio
+   * group merely because they use the same phone identity.
+   */
+  val scopeId: String,
   val authorizedMemberIds: List<String>,
   val authorityEnabled: Boolean
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): EnrollmentAccessPolicy {
-      val authorizedMemberIds = pigeonVar_list[0] as List<String>
-      val authorityEnabled = pigeonVar_list[1] as Boolean
-      return EnrollmentAccessPolicy(authorizedMemberIds, authorityEnabled)
+      val scopeId = pigeonVar_list[0] as String
+      val authorizedMemberIds = pigeonVar_list[1] as List<String>
+      val authorityEnabled = pigeonVar_list[2] as Boolean
+      return EnrollmentAccessPolicy(scopeId, authorizedMemberIds, authorityEnabled)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
+      scopeId,
       authorizedMemberIds,
       authorityEnabled,
     )
@@ -468,17 +476,18 @@ data class EnrollmentAccessPolicy (
       return true
     }
     val other = other as EnrollmentAccessPolicy
-    return MeshApiPigeonUtils.deepEquals(this.authorizedMemberIds, other.authorizedMemberIds) && MeshApiPigeonUtils.deepEquals(this.authorityEnabled, other.authorityEnabled)
+    return MeshApiPigeonUtils.deepEquals(this.scopeId, other.scopeId) && MeshApiPigeonUtils.deepEquals(this.authorizedMemberIds, other.authorizedMemberIds) && MeshApiPigeonUtils.deepEquals(this.authorityEnabled, other.authorityEnabled)
   }
 
   override fun hashCode(): Int {
     var result = javaClass.hashCode()
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.scopeId)
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.authorizedMemberIds)
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.authorityEnabled)
     return result
   }
   override fun toString(): String {
-    return "EnrollmentAccessPolicy(authorizedMemberIds=$authorizedMemberIds, authorityEnabled=$authorityEnabled)"
+    return "EnrollmentAccessPolicy(scopeId=$scopeId, authorizedMemberIds=$authorizedMemberIds, authorityEnabled=$authorityEnabled)"
   }
 }
 

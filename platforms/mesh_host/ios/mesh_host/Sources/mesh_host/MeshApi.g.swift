@@ -430,22 +430,29 @@ struct GroupInfo: Hashable, CustomStringConvertible {
 ///
 /// Generated class from Pigeon that represents data sent in messages.
 struct EnrollmentAccessPolicy: Hashable, CustomStringConvertible {
+  /// Opaque, product-owned 128-bit scope. It selects a separate encrypted
+  /// Field store so policies from two product groups cannot share a radio
+  /// group merely because they use the same phone identity.
+  var scopeId: String
   var authorizedMemberIds: [String]
   var authorityEnabled: Bool
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> EnrollmentAccessPolicy? {
-    let authorizedMemberIds = pigeonVar_list[0] as! [String]
-    let authorityEnabled = pigeonVar_list[1] as! Bool
+    let scopeId = pigeonVar_list[0] as! String
+    let authorizedMemberIds = pigeonVar_list[1] as! [String]
+    let authorityEnabled = pigeonVar_list[2] as! Bool
 
     return EnrollmentAccessPolicy(
+      scopeId: scopeId,
       authorizedMemberIds: authorizedMemberIds,
       authorityEnabled: authorityEnabled
     )
   }
   func toList() -> [Any?] {
     return [
+      scopeId,
       authorizedMemberIds,
       authorityEnabled,
     ]
@@ -454,17 +461,18 @@ struct EnrollmentAccessPolicy: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return MeshApiPigeonInternal.deepEquals(lhs.authorizedMemberIds, rhs.authorizedMemberIds) && MeshApiPigeonInternal.deepEquals(lhs.authorityEnabled, rhs.authorityEnabled)
+    return MeshApiPigeonInternal.deepEquals(lhs.scopeId, rhs.scopeId) && MeshApiPigeonInternal.deepEquals(lhs.authorizedMemberIds, rhs.authorizedMemberIds) && MeshApiPigeonInternal.deepEquals(lhs.authorityEnabled, rhs.authorityEnabled)
   }
 
   func hash(into hasher: inout Hasher) {
     hasher.combine("EnrollmentAccessPolicy")
+    MeshApiPigeonInternal.deepHash(value: scopeId, hasher: &hasher)
     MeshApiPigeonInternal.deepHash(value: authorizedMemberIds, hasher: &hasher)
     MeshApiPigeonInternal.deepHash(value: authorityEnabled, hasher: &hasher)
   }
 
   public var description: String {
-    return "EnrollmentAccessPolicy(authorizedMemberIds: \(String(describing: authorizedMemberIds)), authorityEnabled: \(String(describing: authorityEnabled)))"
+    return "EnrollmentAccessPolicy(scopeId: \(String(describing: scopeId)), authorizedMemberIds: \(String(describing: authorizedMemberIds)), authorityEnabled: \(String(describing: authorityEnabled)))"
   }
 }
 

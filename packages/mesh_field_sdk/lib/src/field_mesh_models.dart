@@ -236,16 +236,22 @@ abstract interface class FieldMeshSdk {
 
 /// Product-owned admission scope for automatic group enrollment.
 ///
-/// Values are public, lowercase 32-byte member fingerprints. The host verifies
-/// the signed enrollment request independently before it compares this roster,
-/// so callers cannot authorize a request by naming a radio address.
+/// Member IDs are public, lowercase 32-byte fingerprints. The separate scope
+/// is an opaque product identifier. The host verifies each signed enrollment
+/// request independently before it compares the request with this roster, so
+/// callers cannot authorize a request by naming a radio address.
 final class FieldEnrollmentAccessPolicy {
   FieldEnrollmentAccessPolicy({
+    required this.scopeId,
     required Iterable<String> authorizedMemberIds,
     required this.authorityEnabled,
   }) : authorizedMemberIds = Set.unmodifiable(authorizedMemberIds);
 
   final Set<String> authorizedMemberIds;
+
+  /// Opaque lowercase 128-bit product group scope. The value is local to the
+  /// host and is never advertised over Bluetooth or Wi-Fi Aware.
+  final String scopeId;
 
   /// Only the product's current authority may issue new membership policies.
   /// A former leader retains no admission power after the product disables it.

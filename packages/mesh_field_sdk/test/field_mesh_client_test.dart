@@ -304,16 +304,22 @@ void main() {
 
       await sdk.configureEnrollmentAccess(
         FieldEnrollmentAccessPolicy(
+          scopeId: '0123456789abcdef0123456789abcdef',
           authorizedMemberIds: [member],
           authorityEnabled: true,
         ),
       );
       expect(gateway.enrollmentAccess?.authorizedMemberIds, {member});
+      expect(
+        gateway.enrollmentAccess?.scopeId,
+        '0123456789abcdef0123456789abcdef',
+      );
       await sdk.clearEnrollmentAccess();
       expect(gateway.enrollmentAccess, isNull);
       await expectLater(
         sdk.configureEnrollmentAccess(
           FieldEnrollmentAccessPolicy(
+            scopeId: '0123456789abcdef0123456789abcdef',
             authorizedMemberIds: ['not-a-member'],
             authorityEnabled: false,
           ),
@@ -333,6 +339,7 @@ void main() {
     await expectLater(
       sdk.configureEnrollmentAccess(
         FieldEnrollmentAccessPolicy(
+          scopeId: '0123456789abcdef0123456789abcdef',
           authorizedMemberIds: const [
             'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           ],
@@ -344,6 +351,19 @@ void main() {
     await expectLater(
       sdk.configureEnrollmentAccess(
         FieldEnrollmentAccessPolicy(
+          scopeId: 'not-a-product-scope',
+          authorizedMemberIds: const [
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+          ],
+          authorityEnabled: true,
+        ),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      sdk.configureEnrollmentAccess(
+        FieldEnrollmentAccessPolicy(
+          scopeId: '0123456789abcdef0123456789abcdef',
           authorizedMemberIds: overCapacity,
           authorityEnabled: true,
         ),
@@ -358,6 +378,7 @@ void main() {
     await expectLater(
       sdk.configureEnrollmentAccess(
         FieldEnrollmentAccessPolicy(
+          scopeId: '0123456789abcdef0123456789abcdef',
           authorizedMemberIds: const [
             '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
           ],

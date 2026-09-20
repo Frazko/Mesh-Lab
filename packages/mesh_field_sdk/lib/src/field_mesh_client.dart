@@ -141,6 +141,7 @@ final class MeshHostGateway
   ) async {
     await _api.configureEnrollmentAccess(
       EnrollmentAccessPolicy(
+        scopeId: policy.scopeId,
         authorizedMemberIds: policy.authorizedMemberIds.toList(growable: false),
         authorityEnabled: policy.authorityEnabled,
       ),
@@ -275,7 +276,8 @@ final class FieldMeshClient
     if (gateway == null) {
       throw UnsupportedError('El host no admite control de incorporaciones.');
     }
-    if (policy.authorizedMemberIds.length > 50 ||
+    if (!RegExp(r'^[0-9a-f]{32}$').hasMatch(policy.scopeId) ||
+        policy.authorizedMemberIds.length > 50 ||
         policy.authorizedMemberIds.any(
           (member) => !RegExp(r'^[0-9a-f]{64}$').hasMatch(member),
         )) {

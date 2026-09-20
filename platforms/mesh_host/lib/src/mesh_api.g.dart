@@ -392,9 +392,12 @@ class GroupInfo {
 /// verifies the request signature before comparing it with this roster.
 class EnrollmentAccessPolicy {
   EnrollmentAccessPolicy({
+    required this.scopeId,
     required this.authorizedMemberIds,
     required this.authorityEnabled,
   });
+
+  String scopeId;
 
   List<String> authorizedMemberIds;
 
@@ -402,6 +405,7 @@ class EnrollmentAccessPolicy {
 
   List<Object?> _toList() {
     return <Object?>[
+      scopeId,
       authorizedMemberIds,
       authorityEnabled,
     ];
@@ -413,8 +417,9 @@ class EnrollmentAccessPolicy {
   static EnrollmentAccessPolicy decode(Object result) {
     result as List<Object?>;
     return EnrollmentAccessPolicy(
-      authorizedMemberIds: (result[0]! as List<Object?>).cast<String>(),
-      authorityEnabled: result[1]! as bool,
+      scopeId: result[0]! as String,
+      authorizedMemberIds: (result[1]! as List<Object?>).cast<String>(),
+      authorityEnabled: result[2]! as bool,
     );
   }
 
@@ -427,7 +432,9 @@ class EnrollmentAccessPolicy {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(authorizedMemberIds, other.authorizedMemberIds) && _deepEquals(authorityEnabled, other.authorityEnabled);
+    return _deepEquals(scopeId, other.scopeId) &&
+        _deepEquals(authorizedMemberIds, other.authorizedMemberIds) &&
+        _deepEquals(authorityEnabled, other.authorityEnabled);
   }
 
   @override
@@ -436,7 +443,7 @@ class EnrollmentAccessPolicy {
 
   @override
   String toString() {
-    return 'EnrollmentAccessPolicy(authorizedMemberIds: $authorizedMemberIds, authorityEnabled: $authorityEnabled)';
+    return 'EnrollmentAccessPolicy(scopeId: $scopeId, authorizedMemberIds: $authorizedMemberIds, authorityEnabled: $authorityEnabled)';
   }
 }
 

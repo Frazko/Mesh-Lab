@@ -11,9 +11,11 @@ import java.util.concurrent.Executors
 /** Process-scoped runtime, serial executor. Detaching Dart does not destroy it. */
 internal object NativeRuntime {
     val dispatcher = Executors.newSingleThreadExecutor { r -> Thread(r, "mesh-runtime").apply { isDaemon = true } }.asCoroutineDispatcher()
+    private const val labScope = "lab"
     private var handle = 0L
     private var storeHandle = 0L
     private var relayGate = 0L
+    private var storeScope = labScope
     fun request(method: Int, argument: Long = 0): ByteArray {
         if (handle == 0L) {
             check(NativeBridge.abiVersion() == 1) { "MESH_2" }
@@ -23,12 +25,32 @@ internal object NativeRuntime {
     }
     fun prepareStore(context: android.content.Context, material: SecureIdentity.StoreMaterial) {
         if (storeHandle != 0L) { material.wipe(); return }
-        val directory = File(context.noBackupFilesDir, "mesh-store")
+        val directory = File(File(context.noBackupFilesDir, "mesh-store"), storeScope)
         try {
             check(directory.isDirectory || directory.mkdirs()) { "SECURE_STORE_UNAVAILABLE" }
             storeHandle = NativeBridge.secureStoreOpen(material.databaseKey, material.member, File(directory, "state-v1.db").path)
             check(storeHandle != 0L) { "SECURE_STORE_UNAVAILABLE" }
         } finally { material.wipe() }
+    }
+    /** Switches only after product code selected a distinct authenticated scope.
+     * Each scope has its own encrypted SQLCipher file, so a policy from convoy
+     * A cannot become the radio group for convoy B. */
+    fun productScopeWillChange(scope: String): Boolean {
+        check(scope.matches(Regex("^[0-9a-f]{32}$"))) { "INVALID_PRODUCT_SCOPE" }
+        return scope != storeScope
+    }
+    fun selectProductScope(context: android.content.Context, material: SecureIdentity.StoreMaterial, scope: String) {
+        check(scope.matches(Regex("^[0-9a-f]{32}$"))) { "INVALID_PRODUCT_SCOPE" }
+        if (scope == storeScope && storeHandle != 0L) { material.wipe(); return }
+        releaseStore()
+        storeScope = scope
+        prepareStore(context, material)
+    }
+    /** Ends product use of a scope without deleting its encrypted audit data.
+     * A later prepare opens the isolated lab store, never the last convoy. */
+    fun clearProductScope() {
+        releaseStore()
+        storeScope = labScope
     }
     fun releaseStore() { if (storeHandle != 0L) { NativeBridge.secureStoreRelease(storeHandle); storeHandle = 0L }; if (relayGate != 0L) { NativeBridge.relayGateRelease(relayGate); relayGate = 0L } }
     fun policyEpoch(): Long {
@@ -309,13 +331,32 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
     override suspend fun configureEnrollmentAccess(policy: EnrollmentAccessPolicy) {
         val fingerprint = Regex("^[0-9a-f]{64}$")
         val members = policy.authorizedMemberIds.map { it.lowercase() }.toSet()
-        if (members.size != policy.authorizedMemberIds.size || members.size > 50 || members.any { !fingerprint.matches(it) }) {
+        if (!policy.scopeId.matches(Regex("^[0-9a-f]{32}$")) || members.size != policy.authorizedMemberIds.size || members.size > 50 || members.any { !fingerprint.matches(it) }) {
             throw FlutterError("INVALID_ENROLLMENT_ROSTER", "La lista autorizada de la Malla no es válida.", null)
         }
+        val scopeChanged = withContext(NativeRuntime.dispatcher) {
+            NativeRuntime.productScopeWillChange(policy.scopeId)
+        }
+        // A product scope is a hard boundary. Do not retain an authenticated
+        // radio session while replacing the encrypted Field store beneath it.
+        if (scopeChanged) {
+            bluetooth.stopDiscovery()
+            aware.stop()
+        }
+        withContext(NativeRuntime.dispatcher) {
+            NativeRuntime.selectProductScope(appContext, identity.storeMaterial(), policy.scopeId)
+        }
         bluetooth.setEnrollmentAllowedMembers(members, policy.authorityEnabled)
+        aware.policyChanged()
     }
     override suspend fun clearEnrollmentAccess() {
+        // Clearing product authority also closes every direct link before its
+        // cryptographic store is released.
+        bluetooth.stopDiscovery()
+        aware.stop()
         bluetooth.setEnrollmentAllowedMembers(null)
+        withContext(NativeRuntime.dispatcher) { NativeRuntime.clearProductScope() }
+        aware.policyChanged()
     }
     override suspend fun bluetoothInfo(): BluetoothInfo = bluetooth.info()
     override suspend fun prepareBluetooth(): BluetoothInfo = bluetooth.prepare()

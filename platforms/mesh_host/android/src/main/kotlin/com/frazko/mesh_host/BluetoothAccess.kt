@@ -495,6 +495,10 @@ internal class BluetoothAccess(
         probes = 0
         clients.values.forEach { it.close() }
         clients.clear(); serverDevices.clear(); serverWriteSizes.clear()
+        // Wi-Fi Aware sockets share the authenticated session owner. They must
+        // close with the Bluetooth session boundary too, especially on a
+        // product-scope transition.
+        closeAwareSockets()
         clientSessions.values.forEach { NativeRuntime.releaseSession(it.handle) }
         serverSessions.values.forEach { NativeRuntime.releaseSession(it.handle) }
         clientSessions.clear(); serverSessions.clear(); clientWrites.clear(); serverWrites.clear(); inbound.clear()
