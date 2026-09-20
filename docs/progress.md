@@ -25,7 +25,7 @@ que una alterada, sin instante válido o sobredimensionada falla y que la FFI li
 antes de devolver un error. El puente JNI compila con el motor. La fachada SDK
 suma 29 pruebas y análisis limpio: acepta sólo 50 huellas minúsculas, rechaza
 hosts antiguos que no pueden imponer la política y conserva una limpieza
-compatible. En Convoy, 112 pruebas cercanas cubren el flujo integrado en
+compatible. En Convoy, 115 pruebas cercanas cubren el flujo integrado en
 memoria roster→binding→adaptador→SDK→host, sólo una creación de grupo por
 líder, miembro sin autoridad, salida y los fallos de cada frontera. Pigeon se
 regeneró para Dart/Kotlin/Swift y el host pasó análisis Dart. Falta compilar los
