@@ -149,6 +149,9 @@ impl DurableRecord {
 /// transport. A QR invitation is deliberately a short-lived token, not this
 /// complete bundle.
 pub const MAX_POLICY_BUNDLE: usize = 64 * 1024;
+/// A bounded public endorsement that lets the next Convoy leader replace the
+/// authority without ever copying the prior leader's private key.
+pub const MAX_AUTHORITY_HANDOFF: usize = 512;
 fn auth(_: crypto::CryptoError) -> DurableError {
     DurableError::AuthenticationFailed
 }
@@ -465,6 +468,134 @@ impl PolicyBundle {
         bundle.encode()?;
         Ok(bundle)
     }
+}
+
+/// Signed authorization from an active authority to a specific successor.
+/// The successor must still possess its own protected identity and reissue the
+/// next policy epoch; this record is never a transferable private credential.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthorityHandoff {
+    pub prior_authority: [u8; 32],
+    pub prior_scope: Scope,
+    pub prior_roster_digest: [u8; 32],
+    pub next_authority: [u8; 32],
+    pub next_epoch: u64,
+    pub valid_until: u64,
+    signature: [u8; 64],
+}
+
+impl AuthorityHandoff {
+    fn body(&self) -> Result<Vec<u8>> {
+        if self.prior_scope.epoch == 0
+            || self.prior_scope.epoch > MAX_LOGICAL_TIME
+            || self.next_epoch
+                != self
+                    .prior_scope
+                    .epoch
+                    .checked_add(1)
+                    .ok_or(DurableError::InvalidInput)?
+            || self.valid_until == 0
+            || self.valid_until > MAX_LOGICAL_TIME
+            || self.next_authority == self.prior_authority
+        {
+            return Err(DurableError::InvalidInput);
+        }
+        let mut writer = Writer::default();
+        writer.array(8);
+        writer.uint(1);
+        writer.bytes(&self.prior_authority);
+        writer.bytes(&self.prior_scope.group);
+        writer.uint(self.prior_scope.epoch);
+        writer.bytes(&self.prior_roster_digest);
+        writer.bytes(&self.next_authority);
+        writer.uint(self.next_epoch);
+        writer.uint(self.valid_until);
+        Ok(writer.finish())
+    }
+
+    /// Serializes the public signed record. It may cross a backend or an
+    /// authenticated radio link, but cannot be replayed against a different
+    /// authority, group, epoch, roster, successor, or expiry.
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        let body = self.body()?;
+        let encoded = signed(&body, self.signature);
+        if encoded.len() > MAX_AUTHORITY_HANDOFF {
+            return Err(DurableError::ResourcePressure);
+        }
+        Ok(encoded)
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self> {
+        let (body, signature) = signed_parts(bytes, MAX_AUTHORITY_HANDOFF)?;
+        let mut reader = Reader::new(body, MAX_AUTHORITY_HANDOFF)?;
+        reader.array(8)?;
+        version(reader.uint()?)?;
+        let handoff = Self {
+            prior_authority: reader.fixed()?,
+            prior_scope: Scope {
+                group: reader.fixed()?,
+                epoch: reader.uint()?,
+            },
+            prior_roster_digest: reader.fixed()?,
+            next_authority: reader.fixed()?,
+            next_epoch: reader.uint()?,
+            valid_until: reader.uint()?,
+            signature,
+        };
+        reader.end()?;
+        handoff.encode()?;
+        Ok(handoff)
+    }
+
+    /// Checks the old authority signature and every piece of state that the
+    /// receiver pinned in its SQLCipher policy snapshot.
+    pub fn verify_for(
+        &self,
+        authority: [u8; 32],
+        scope: Scope,
+        roster_digest: [u8; 32],
+        now: u64,
+    ) -> Result<()> {
+        time(now)?;
+        if now >= self.valid_until
+            || self.prior_authority != authority
+            || self.prior_scope != scope
+            || self.prior_roster_digest != roster_digest
+        {
+            return Err(DurableError::AuthenticationFailed);
+        }
+        let body = self.body()?;
+        crypto::verify(authority, scope, Domain::Transition, &body, self.signature).map_err(auth)
+    }
+}
+
+/// Produces a one-time handoff for the authority currently certified in the
+/// policy snapshot. The caller supplies the successor's public Field identity.
+pub fn issue_authority_handoff(
+    authority: &IdentitySigningKey,
+    scope: Scope,
+    roster_digest: [u8; 32],
+    next_authority: [u8; 32],
+    valid_until: u64,
+) -> Result<AuthorityHandoff> {
+    let next_epoch = scope
+        .epoch
+        .checked_add(1)
+        .ok_or(DurableError::InvalidInput)?;
+    let mut handoff = AuthorityHandoff {
+        prior_authority: authority.public_key(),
+        prior_scope: scope,
+        prior_roster_digest: roster_digest,
+        next_authority,
+        next_epoch,
+        valid_until,
+        signature: [0; 64],
+    };
+    let body = handoff.body()?;
+    handoff.signature = authority
+        .sign(scope, Domain::Transition, &body)
+        .map_err(auth)?;
+    Ok(handoff)
 }
 
 /// Fixed lab role: send/receive durable messages. Invitations, roles/capabilities

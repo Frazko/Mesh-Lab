@@ -3,7 +3,7 @@
 //! LocalCommit is local evidence of persistence, NEVER a network delivery receipt.
 use mesh_crypto::Scope;
 use mesh_object::{digest, Manifest, PreparedObject};
-use mesh_protocol::{PolicyBundle, VerifiedRoster};
+use mesh_protocol::{AuthorityHandoff, PolicyBundle, VerifiedRoster};
 use mesh_replication::{RelayFrame, RelayId};
 use mesh_types::durable::*;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
@@ -1411,6 +1411,50 @@ impl Store {
         revoked: &[u64],
         now: u64,
     ) -> Result<PolicySnapshot> {
+        self.install_policy_with_transition(authority, scope, certificates, revoked, now, None)
+    }
+
+    /// Replaces a pinned authority only after a verified handoff from the
+    /// current authority. The new policy must be the immediate next epoch and
+    /// retain the exact group; callers never supply a private authority key.
+    pub fn install_rotated_policy(
+        &mut self,
+        authority: [u8; 32],
+        scope: Scope,
+        certificates: &[Vec<u8>],
+        revoked: &[u64],
+        handoff: &AuthorityHandoff,
+        now: u64,
+    ) -> Result<PolicySnapshot> {
+        let current = self
+            .active_policy(now)?
+            .ok_or(DurableError::AuthenticationFailed)?;
+        handoff.verify_for(current.authority, current.scope, current.roster_digest, now)?;
+        if authority != handoff.next_authority
+            || scope.group != current.scope.group
+            || scope.epoch != handoff.next_epoch
+        {
+            return Err(DurableError::AuthenticationFailed);
+        }
+        self.install_policy_with_transition(
+            authority,
+            scope,
+            certificates,
+            revoked,
+            now,
+            Some(current),
+        )
+    }
+
+    fn install_policy_with_transition(
+        &mut self,
+        authority: [u8; 32],
+        scope: Scope,
+        certificates: &[Vec<u8>],
+        revoked: &[u64],
+        now: u64,
+        transition: Option<PolicySnapshot>,
+    ) -> Result<PolicySnapshot> {
         let roster = VerifiedRoster::verify(authority, scope, certificates, revoked, now)?;
         if !roster.contains_member(self.member) {
             return Err(DurableError::AuthenticationFailed);
@@ -1446,7 +1490,16 @@ impl Store {
             .optional()
             .map_err(sql)?;
         if let Some((old_authority, old_group, old_epoch, old_digest)) = existing {
-            if old_authority != authority
+            let rotation_allowed = transition.is_some_and(|prior| {
+                prior.authority == old_authority
+                    && prior.scope.group == old_group
+                    && prior.scope.epoch == old_epoch
+                    && prior.roster_digest == old_digest
+                    && authority != old_authority
+                    && scope.group == old_group
+                    && scope.epoch == old_epoch.saturating_add(1)
+            });
+            if (old_authority != authority && !rotation_allowed)
                 || old_group != scope.group
                 || scope.epoch < old_epoch
                 || (scope.epoch == old_epoch && old_digest != snapshot.roster_digest)

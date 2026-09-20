@@ -190,6 +190,45 @@ fn policy_bundle_is_canonical_and_rejects_trailing_or_oversized_entries() {
     .encode()
     .is_err());
 }
+
+#[test]
+fn authority_handoff_is_bound_to_the_old_roster_and_new_leader() {
+    let lab = Lab::new();
+    let scope = lab.roster.scope();
+    let successor = IdentitySigningKey::import(Zeroizing::new([93; 32]));
+    let handoff = issue_authority_handoff(
+        &lab.root,
+        scope,
+        lab.roster.digest(),
+        successor.public_key(),
+        100,
+    )
+    .unwrap();
+    let encoded = handoff.encode().unwrap();
+    let decoded = AuthorityHandoff::decode(&encoded).unwrap();
+
+    assert_eq!(decoded.next_authority, successor.public_key());
+    assert_eq!(decoded.next_epoch, scope.epoch + 1);
+    assert!(decoded
+        .verify_for(lab.root.public_key(), scope, lab.roster.digest(), 99)
+        .is_ok());
+    assert!(decoded
+        .verify_for(lab.root.public_key(), scope, [0; 32], 99)
+        .is_err());
+    assert!(decoded
+        .verify_for(lab.root.public_key(), scope, lab.roster.digest(), 100)
+        .is_err());
+    assert!(decoded
+        .verify_for(successor.public_key(), scope, lab.roster.digest(), 99)
+        .is_err());
+
+    let mut tampered = encoded;
+    *tampered.last_mut().unwrap() ^= 1;
+    assert!(AuthorityHandoff::decode(&tampered)
+        .unwrap()
+        .verify_for(lab.root.public_key(), scope, lab.roster.digest(), 99)
+        .is_err());
+}
 #[test]
 fn field_roster_accepts_fifty_members_but_not_fifty_one() {
     let authority = IdentitySigningKey::import(Zeroizing::new([91; 32]));

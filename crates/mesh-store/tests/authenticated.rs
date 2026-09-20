@@ -1,4 +1,5 @@
 mod support;
+use mesh_crypto::{IdentitySigningKey, Scope};
 use mesh_object::{digest, PreparedObject};
 use mesh_protocol::{self as protocol, CertificateClaims, DurableRecord, VerifiedRoster};
 use mesh_replication::{RelayCache, RelayDecision, RelayFrame, RelayId, RoutedRecord};
@@ -977,6 +978,70 @@ fn same_epoch_policy_replacement_is_rejected_without_changing_the_snapshot() {
         .install_policy(lab.authority.public_key(), scope, &replacement, &[], 1)
         .is_err());
     assert_eq!(store.active_policy(2).unwrap(), Some(installed));
+}
+
+#[test]
+fn signed_authority_handoff_allows_only_the_immediate_successor_epoch() {
+    let files = Files::new();
+    let lab = Lab::new();
+    let mut store = files.open("policy-handoff.db", 1);
+    let prior = store
+        .install_policy(
+            lab.authority.public_key(),
+            lab.roster.scope(),
+            &lab.certificates,
+            &[],
+            1,
+        )
+        .unwrap();
+    let successor = IdentitySigningKey::import(Zeroizing::new([99; 32]));
+    let handoff = protocol::issue_authority_handoff(
+        &lab.authority,
+        prior.scope,
+        prior.roster_digest,
+        successor.public_key(),
+        100,
+    )
+    .unwrap();
+    let next_scope = Scope {
+        group: prior.scope.group,
+        epoch: prior.scope.epoch + 1,
+    };
+    let certificates: Vec<_> = (0..lab.signers.len())
+        .map(|index| {
+            protocol::issue_certificate(
+                &successor,
+                &CertificateClaims {
+                    group: next_scope.group,
+                    member: MemberId([index as u8 + 1; 32]),
+                    signing_key: lab.signers[index].public_key(),
+                    delivery_key: lab.secrets[index].public_key(),
+                    valid_from: 2,
+                    valid_until: 1000,
+                    epoch: next_scope.epoch,
+                    serial: index as u64 + 1,
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+
+    // A new signing key alone can never replace the pinned authority.
+    assert!(store
+        .install_policy(successor.public_key(), next_scope, &certificates, &[], 2,)
+        .is_err());
+    let rotated = store
+        .install_rotated_policy(
+            successor.public_key(),
+            next_scope,
+            &certificates,
+            &[],
+            &handoff,
+            2,
+        )
+        .unwrap();
+    assert_eq!(rotated.authority, successor.public_key());
+    assert_eq!(rotated.scope, next_scope);
 }
 
 #[test]

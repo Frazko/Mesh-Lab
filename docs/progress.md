@@ -6,7 +6,7 @@ La tabla inicial conserva la línea base del plan; las secciones fechadas poster
 
 ## C3 — admisión automática gobernada por Convoy
 
-**Actualizado: 2026-09-20. C3 local: 76%; gate operativo: pendiente.** La
+**Actualizado: 2026-09-20. C3 local: 78%; gate operativo: pendiente.** La
 autoridad de producto aprobada es el **líder actual del convoy**: el creador
 comienza como líder y crea la autoridad inicial, pero esa propiedad no queda
 atada de forma permanente a su teléfono. Antes de que el host emita una
@@ -32,12 +32,17 @@ memoria roster→binding→adaptador→SDK→host, sólo una creación de grupo 
 líder, miembro sin autoridad, salida, el líder promovido sin autoridad de la época y los fallos de cada frontera. Pigeon se
 regeneró para Dart/Kotlin/Swift y el host pasó análisis Dart. El framework Apple
 se recompiló y el build iOS de dispositivo pasó, junto con el host Swift. El
-host Android actualizado también compiló; falta ejecutar la campaña física. La rotación de
-autoridad tras una transferencia de liderazgo sigue abierta: los miembros
-existentes pueden mantener su enlace durante el cambio, pero la admisión debe
-detenerse y una nueva época debe ser emitida por el nuevo líder antes de aceptar
-miembros. No se cuenta como cerrada hasta que esa migración tenga protocolo,
-backend y prueba física.
+host Android actualizado también compiló; falta ejecutar la campaña física. El
+núcleo Rust ahora también codifica un `AuthorityHandoff` canónico y acotado:
+la autoridad anterior firma su scope, digest de roster, sucesor, época inmediata
+y vencimiento. SQLCipher acepta el cambio sólo si la firma coincide con la
+política activa y el sucesor instala exactamente la época siguiente del mismo
+grupo; una clave nueva sin ese handoff se rechaza. Las pruebas cubren la firma,
+el digest, expiración, manipulación y el rechazo del salto sin autorización.
+Todavía no se expone el handoff por FFI/Pigeon/hosts ni se persiste o distribuye
+por el backend con ACKs. Por eso la admisión de un líder promovido sigue
+bloqueada de forma segura y C3 no se cuenta como cerrada hasta que esa migración
+recorra protocolo, host, backend y prueba física.
 
 ### SEC-05 — separación de grupos de producto
 
