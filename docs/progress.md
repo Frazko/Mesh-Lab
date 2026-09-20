@@ -1,12 +1,12 @@
 # Avance del plan
 
-Estado vigente: 2026-09-20. **73% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-20. **74% global estimado · 90% Wi‑Fi Aware.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
 
 ## C3 — admisión automática gobernada por Convoy
 
-**Actualizado: 2026-09-20. C3 local: 70%; gate operativo: pendiente.** La
+**Actualizado: 2026-09-20. C3 local: 72%; gate operativo: pendiente.** La
 autoridad de producto aprobada es el **líder actual del convoy**: el creador
 comienza como líder y crea la autoridad inicial, pero esa propiedad no queda
 atada de forma permanente a su teléfono. Antes de que el host emita una
@@ -29,8 +29,8 @@ compatible. En Convoy, 115 pruebas cercanas cubren el flujo integrado en
 memoria roster→binding→adaptador→SDK→host, sólo una creación de grupo por
 líder, miembro sin autoridad, salida y los fallos de cada frontera. Pigeon se
 regeneró para Dart/Kotlin/Swift y el host pasó análisis Dart. El framework Apple
-se recompiló y el build iOS de dispositivo pasó, junto con el host Swift; falta
-compilar Android actualizado y ejecutar la campaña física. La rotación de
+se recompiló y el build iOS de dispositivo pasó, junto con el host Swift. El
+host Android actualizado también compiló; falta ejecutar la campaña física. La rotación de
 autoridad tras una transferencia de liderazgo sigue abierta: los miembros
 existentes pueden mantener su enlace durante el cambio, pero la admisión debe
 detenerse y una nueva época debe ser emitida por el nuevo líder antes de aceptar
