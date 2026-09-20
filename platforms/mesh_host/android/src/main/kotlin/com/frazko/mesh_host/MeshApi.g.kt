@@ -435,6 +435,53 @@ data class GroupInfo (
   }
 }
 
+/**
+ * Product-owned admission boundary for automatic enrollment. Member IDs are
+ * public 32-byte fingerprints encoded as lowercase hex. The native host still
+ * verifies the request signature before comparing it with this roster.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class EnrollmentAccessPolicy (
+  val authorizedMemberIds: List<String>,
+  val authorityEnabled: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): EnrollmentAccessPolicy {
+      val authorizedMemberIds = pigeonVar_list[0] as List<String>
+      val authorityEnabled = pigeonVar_list[1] as Boolean
+      return EnrollmentAccessPolicy(authorizedMemberIds, authorityEnabled)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      authorizedMemberIds,
+      authorityEnabled,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as EnrollmentAccessPolicy
+    return MeshApiPigeonUtils.deepEquals(this.authorizedMemberIds, other.authorizedMemberIds) && MeshApiPigeonUtils.deepEquals(this.authorityEnabled, other.authorityEnabled)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.authorizedMemberIds)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.authorityEnabled)
+    return result
+  }
+  override fun toString(): String {
+    return "EnrollmentAccessPolicy(authorizedMemberIds=$authorizedMemberIds, authorityEnabled=$authorityEnabled)"
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class BluetoothInfo (
   val available: Boolean,
@@ -824,30 +871,35 @@ private open class MeshApiPigeonCodec : StandardMessageCodec() {
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          BluetoothInfo.fromList(it)
+          EnrollmentAccessPolicy.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VerifiedIncomingText.fromList(it)
+          BluetoothInfo.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VerifiedIncomingVoice.fromList(it)
+          VerifiedIncomingText.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VoiceInfo.fromList(it)
+          VerifiedIncomingVoice.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          DeliveryInfo.fromList(it)
+          VoiceInfo.fromList(it)
         }
       }
       139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          DeliveryInfo.fromList(it)
+        }
+      }
+      140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           AwareInfo.fromList(it)
         }
@@ -877,28 +929,32 @@ private open class MeshApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is BluetoothInfo -> {
+      is EnrollmentAccessPolicy -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is VerifiedIncomingText -> {
+      is BluetoothInfo -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is VerifiedIncomingVoice -> {
+      is VerifiedIncomingText -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is VoiceInfo -> {
+      is VerifiedIncomingVoice -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is DeliveryInfo -> {
+      is VoiceInfo -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is AwareInfo -> {
+      is DeliveryInfo -> {
         stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is AwareInfo -> {
+        stream.write(140)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -917,6 +973,8 @@ interface MeshHostApi {
   suspend fun createEnrollmentRequest(invitation: ByteArray): ByteArray
   suspend fun issueEnrollment(request: ByteArray): ByteArray
   suspend fun installPolicy(policy: ByteArray): GroupInfo
+  suspend fun configureEnrollmentAccess(policy: EnrollmentAccessPolicy)
+  suspend fun clearEnrollmentAccess()
   suspend fun bluetoothInfo(): BluetoothInfo
   suspend fun prepareBluetooth(): BluetoothInfo
   suspend fun startBluetoothDiscovery(): BluetoothInfo
@@ -1077,6 +1135,44 @@ interface MeshHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.installPolicy(policyArg))
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.configureEnrollmentAccess$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val policyArg = args[0] as EnrollmentAccessPolicy
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                api.configureEnrollmentAccess(policyArg)
+                listOf(null)
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.clearEnrollmentAccess$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                api.clearEnrollmentAccess()
+                listOf(null)
               } catch (exception: Throwable) {
                 MeshApiPigeonUtils.wrapError(exception)
               }

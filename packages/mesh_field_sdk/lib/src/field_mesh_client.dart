@@ -81,9 +81,18 @@ abstract interface class FieldMeshGateway {
   Future<bool> playVoice(String objectId);
 }
 
+/// Optional native gateway extension for a product-authorized enrollment
+/// roster. Keeping it separate avoids widening the base test and transport
+/// contract for applications that do not own membership server-side.
+abstract interface class FieldMeshEnrollmentAccessGateway {
+  Future<void> configureEnrollmentAccess(FieldEnrollmentAccessPolicy policy);
+  Future<void> clearEnrollmentAccess();
+}
+
 /// Default gateway for iOS and Android. It maps mutable Pigeon DTOs into
 /// immutable product DTOs at the package boundary.
-final class MeshHostGateway implements FieldMeshGateway {
+final class MeshHostGateway
+    implements FieldMeshGateway, FieldMeshEnrollmentAccessGateway {
   MeshHostGateway({MeshHostApi? api}) : _api = api ?? MeshHostApi();
 
   final MeshHostApi _api;
@@ -126,6 +135,20 @@ final class MeshHostGateway implements FieldMeshGateway {
   Future<FieldGroup> groupInfo() async => _group(await _api.groupInfo());
   @override
   Future<FieldGroup> createGroup() async => _group(await _api.createGroup());
+  @override
+  Future<void> configureEnrollmentAccess(
+    FieldEnrollmentAccessPolicy policy,
+  ) async {
+    await _api.configureEnrollmentAccess(
+      EnrollmentAccessPolicy(
+        authorizedMemberIds: policy.authorizedMemberIds.toList(growable: false),
+        authorityEnabled: policy.authorityEnabled,
+      ),
+    );
+  }
+
+  @override
+  Future<void> clearEnrollmentAccess() => _api.clearEnrollmentAccess();
   @override
   Future<FieldBluetoothStatus> bluetoothStatus() async =>
       _bluetooth(await _api.bluetoothInfo());
@@ -224,6 +247,7 @@ final class FieldMeshClient
         FieldMeshSdk,
         FieldMeshActionSender,
         FieldMeshVoiceContextSender,
+        FieldMeshEnrollmentAccessController,
         FieldMeshVerifiedIncomingSource,
         FieldMeshVerifiedIncomingVoiceSource {
   FieldMeshClient({FieldMeshGateway? gateway})
@@ -240,6 +264,38 @@ final class FieldMeshClient
   Future<FieldGroup> groupInfo() => _gateway.groupInfo();
   @override
   Future<FieldGroup> createGroup() => _gateway.createGroup();
+
+  @override
+  Future<void> configureEnrollmentAccess(
+    FieldEnrollmentAccessPolicy policy,
+  ) async {
+    final gateway = _gateway is FieldMeshEnrollmentAccessGateway
+        ? _gateway as FieldMeshEnrollmentAccessGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError('El host no admite control de incorporaciones.');
+    }
+    if (policy.authorizedMemberIds.length > 50 ||
+        policy.authorizedMemberIds.any(
+          (member) => !RegExp(r'^[0-9a-f]{64}$').hasMatch(member),
+        )) {
+      throw ArgumentError.value(
+        policy,
+        'policy',
+        'Lista de miembros no válida',
+      );
+    }
+    await gateway.configureEnrollmentAccess(policy);
+  }
+
+  @override
+  Future<void> clearEnrollmentAccess() async {
+    final gateway = _gateway is FieldMeshEnrollmentAccessGateway
+        ? _gateway as FieldMeshEnrollmentAccessGateway
+        : null;
+    if (gateway == null) return;
+    await gateway.clearEnrollmentAccess();
+  }
 
   @override
   Future<FieldSessionStatus> status() async {

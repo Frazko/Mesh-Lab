@@ -79,6 +79,12 @@ internal object NativeRuntime {
             )
         } finally { material.wipe() }
     }
+    fun enrollmentRequestMember(request: ByteArray): ByteArray {
+        check(request.isNotEmpty() && request.size <= 512) { "MESH_1" }
+        val member = NativeBridge.enrollmentRequestMember(request, System.currentTimeMillis() / 1000)
+        check(member.size == 32) { "MESH_1" }
+        return member
+    }
     fun installPolicy(policy: ByteArray): Long {
         check(storeHandle != 0L) { "SECURE_STORE_UNAVAILABLE" }
         return NativeBridge.secureStoreInstallPolicy(storeHandle, policy, System.currentTimeMillis() / 1000)
@@ -299,6 +305,17 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
             aware.policyChanged()
             GroupInfo(epoch > 0L, epoch)
         } catch (e: Exception) { throw FlutterError("GROUP_TRANSFER_FAILED", "No se pudo instalar la política del grupo.", null) }
+    }
+    override suspend fun configureEnrollmentAccess(policy: EnrollmentAccessPolicy) {
+        val fingerprint = Regex("^[0-9a-f]{64}$")
+        val members = policy.authorizedMemberIds.map { it.lowercase() }.toSet()
+        if (members.size != policy.authorizedMemberIds.size || members.size > 50 || members.any { !fingerprint.matches(it) }) {
+            throw FlutterError("INVALID_ENROLLMENT_ROSTER", "La lista autorizada de la Malla no es válida.", null)
+        }
+        bluetooth.setEnrollmentAllowedMembers(members, policy.authorityEnabled)
+    }
+    override suspend fun clearEnrollmentAccess() {
+        bluetooth.setEnrollmentAllowedMembers(null)
     }
     override suspend fun bluetoothInfo(): BluetoothInfo = bluetooth.info()
     override suspend fun prepareBluetooth(): BluetoothInfo = bluetooth.prepare()

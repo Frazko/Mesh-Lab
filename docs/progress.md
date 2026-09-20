@@ -1,8 +1,35 @@
 # Avance del plan
 
-Estado vigente: 2026-09-16. **64% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-20. **71% global estimado · 90% Wi‑Fi Aware.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
+
+## C3 — admisión automática gobernada por Convoy
+
+**Actualizado: 2026-09-20. C3 local: 64%; gate operativo: pendiente.** La
+autoridad de producto aprobada es el **líder actual del convoy**: el creador
+comienza como líder y crea la autoridad inicial, pero esa propiedad no queda
+atada de forma permanente a su teléfono. Antes de que el host emita una
+política de incorporación, el núcleo Rust ahora valida la solicitud pública y
+extrae únicamente la huella certificada del solicitante. Android e iOS comparan
+esa huella con un roster explícito que el adaptador de producto instala; una
+solicitud que no figura en el roster se rechaza antes de tocar la llave privada
+de la autoridad. El nuevo control opcional `FieldMeshEnrollmentAccessController`
+mantiene al SDK reutilizable: un producto aporta sólo huellas públicas
+autorizadas y si este teléfono conserva autoridad de incorporación; Mesh Lab
+conserva su modo experimental de incorporación abierta. Un exlíder queda
+bloqueado por el host aunque conserve la llave local de una época anterior.
+
+Las pruebas unitarias validan que la huella procede de una solicitud firmada y
+que una alterada falla; el puente JNI compila con el motor, y las 27 pruebas del
+SDK más su análisis pasaron. Pigeon se regeneró para Dart/Kotlin/Swift y el
+host pasó análisis Dart. Falta compilar los binarios móviles actualizados y
+aplicar el adaptador Convoy que cargará el roster real. La rotación de autoridad
+tras una transferencia de liderazgo sigue abierta: los miembros existentes
+pueden mantener su enlace durante el cambio, pero la admisión debe detenerse y
+una nueva época debe ser emitida por el nuevo líder antes de aceptar miembros.
+No se cuenta como cerrada hasta que esa migración tenga protocolo, backend y
+prueba física.
 
 ## Entrega agregada por conversación
 

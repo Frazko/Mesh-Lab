@@ -1050,6 +1050,39 @@ pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreIssueE
     }
 }
 #[no_mangle]
+pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_enrollmentRequestMember(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JByteArray,
+    now: jlong,
+) -> jbyteArray {
+    let result = mesh_ffi_c::guarded(|| {
+        if now <= 0 {
+            return Err(mesh_types_error());
+        }
+        let request_length = env
+            .get_array_length(&request)
+            .map_err(|_| mesh_types_error())?;
+        if !(1..=512).contains(&request_length) {
+            return Err(mesh_types_error());
+        }
+        let request = env
+            .convert_byte_array(&request)
+            .map_err(|_| mesh_types_error())?;
+        mesh_ffi_c::enrollment_request_member(&request, now as u64).map(|member| member.0.to_vec())
+    });
+    match result {
+        Ok(member) => env
+            .byte_array_from_slice(&member)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(error) => {
+            failure(&mut env, error as i32);
+            std::ptr::null_mut()
+        }
+    }
+}
+#[no_mangle]
 pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreInstallPolicy(
     mut env: JNIEnv,
     _class: JClass,

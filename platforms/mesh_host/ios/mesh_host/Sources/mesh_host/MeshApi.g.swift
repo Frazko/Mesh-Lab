@@ -424,6 +424,50 @@ struct GroupInfo: Hashable, CustomStringConvertible {
   }
 }
 
+/// Product-owned admission boundary for automatic enrollment. Member IDs are
+/// public 32-byte fingerprints encoded as lowercase hex. The native host still
+/// verifies the request signature before comparing it with this roster.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct EnrollmentAccessPolicy: Hashable, CustomStringConvertible {
+  var authorizedMemberIds: [String]
+  var authorityEnabled: Bool
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> EnrollmentAccessPolicy? {
+    let authorizedMemberIds = pigeonVar_list[0] as! [String]
+    let authorityEnabled = pigeonVar_list[1] as! Bool
+
+    return EnrollmentAccessPolicy(
+      authorizedMemberIds: authorizedMemberIds,
+      authorityEnabled: authorityEnabled
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      authorizedMemberIds,
+      authorityEnabled,
+    ]
+  }
+  static func == (lhs: EnrollmentAccessPolicy, rhs: EnrollmentAccessPolicy) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return MeshApiPigeonInternal.deepEquals(lhs.authorizedMemberIds, rhs.authorizedMemberIds) && MeshApiPigeonInternal.deepEquals(lhs.authorityEnabled, rhs.authorityEnabled)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("EnrollmentAccessPolicy")
+    MeshApiPigeonInternal.deepHash(value: authorizedMemberIds, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: authorityEnabled, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "EnrollmentAccessPolicy(authorizedMemberIds: \(String(describing: authorizedMemberIds)), authorityEnabled: \(String(describing: authorityEnabled)))"
+  }
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct BluetoothInfo: Hashable, CustomStringConvertible {
   var available: Bool
@@ -807,16 +851,18 @@ private class MeshApiPigeonCodecReader: FlutterStandardReader {
     case 133:
       return GroupInfo.fromList(self.readValue() as! [Any?])
     case 134:
-      return BluetoothInfo.fromList(self.readValue() as! [Any?])
+      return EnrollmentAccessPolicy.fromList(self.readValue() as! [Any?])
     case 135:
-      return VerifiedIncomingText.fromList(self.readValue() as! [Any?])
+      return BluetoothInfo.fromList(self.readValue() as! [Any?])
     case 136:
-      return VerifiedIncomingVoice.fromList(self.readValue() as! [Any?])
+      return VerifiedIncomingText.fromList(self.readValue() as! [Any?])
     case 137:
-      return VoiceInfo.fromList(self.readValue() as! [Any?])
+      return VerifiedIncomingVoice.fromList(self.readValue() as! [Any?])
     case 138:
-      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+      return VoiceInfo.fromList(self.readValue() as! [Any?])
     case 139:
+      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+    case 140:
       return AwareInfo.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -841,23 +887,26 @@ private class MeshApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? GroupInfo {
       super.writeByte(133)
       super.writeValue(value.toList())
-    } else if let value = value as? BluetoothInfo {
+    } else if let value = value as? EnrollmentAccessPolicy {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? VerifiedIncomingText {
+    } else if let value = value as? BluetoothInfo {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? VerifiedIncomingVoice {
+    } else if let value = value as? VerifiedIncomingText {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? VoiceInfo {
+    } else if let value = value as? VerifiedIncomingVoice {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? DeliveryInfo {
+    } else if let value = value as? VoiceInfo {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? AwareInfo {
+    } else if let value = value as? DeliveryInfo {
       super.writeByte(139)
+      super.writeValue(value.toList())
+    } else if let value = value as? AwareInfo {
+      super.writeByte(140)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -890,6 +939,8 @@ protocol MeshHostApi {
   func createEnrollmentRequest(invitation: FlutterStandardTypedData) async throws -> FlutterStandardTypedData
   func issueEnrollment(request: FlutterStandardTypedData) async throws -> FlutterStandardTypedData
   func installPolicy(policy: FlutterStandardTypedData) async throws -> GroupInfo
+  func configureEnrollmentAccess(policy: EnrollmentAccessPolicy) async throws
+  func clearEnrollmentAccess() async throws
   func bluetoothInfo() async throws -> BluetoothInfo
   func prepareBluetooth() async throws -> BluetoothInfo
   func startBluetoothDiscovery() async throws -> BluetoothInfo
@@ -1041,6 +1092,38 @@ class MeshHostApiSetup {
       }
     } else {
       installPolicyChannel.setMessageHandler(nil)
+    }
+    let configureEnrollmentAccessChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.configureEnrollmentAccess\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      configureEnrollmentAccessChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let policyArg = args[0] as! EnrollmentAccessPolicy
+        Task { @MainActor in
+          do {
+            try await api.configureEnrollmentAccess(policy: policyArg)
+            reply(wrapResult(nil))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      configureEnrollmentAccessChannel.setMessageHandler(nil)
+    }
+    let clearEnrollmentAccessChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.clearEnrollmentAccess\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      clearEnrollmentAccessChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            try await api.clearEnrollmentAccess()
+            reply(wrapResult(nil))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      clearEnrollmentAccessChannel.setMessageHandler(nil)
     }
     let bluetoothInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.bluetoothInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

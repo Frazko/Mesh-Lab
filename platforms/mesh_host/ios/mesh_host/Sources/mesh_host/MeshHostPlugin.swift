@@ -80,6 +80,23 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
       return GroupInfo(configured: epoch > 0, epoch: epoch)
     }
   }
+  func configureEnrollmentAccess(policy: EnrollmentAccessPolicy) async throws {
+    let members = Set(policy.authorizedMemberIds.map { $0.lowercased() })
+    let valid = members.count == policy.authorizedMemberIds.count && members.count <= 50 &&
+      members.allSatisfy { $0.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil }
+    guard valid else {
+      throw PigeonError(code: "INVALID_ENROLLMENT_ROSTER", message: "La lista autorizada de la Malla no es válida.", details: nil)
+    }
+    onMain {
+      bluetooth.setEnrollmentAllowedMembers(
+        members,
+        authorityEnabled: policy.authorityEnabled
+      )
+    }
+  }
+  func clearEnrollmentAccess() async throws {
+    onMain { bluetooth.setEnrollmentAllowedMembers(nil) }
+  }
   func bluetoothInfo() async throws -> BluetoothInfo {
     if Thread.isMainThread { return bluetooth.info() }
     return DispatchQueue.main.sync { bluetooth.info() }

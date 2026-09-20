@@ -125,6 +125,11 @@ internal class BluetoothAccess(
     private val serverWrites = mutableMapOf<String, ArrayDeque<ByteArray>>()
     private val inbound = mutableMapOf<String, BleFrameCodec.Assembler>()
     private var enrollmentDetail = ""
+    // `null` preserves the laboratory's explicit open-enrollment mode. Product
+    // adapters set a concrete roster before they start discovery; then this
+    // host fails closed before a private authority can issue a policy.
+    @Volatile private var enrollmentAllowedMembers: Set<String>? = null
+    @Volatile private var enrollmentAuthorityEnabled = true
     private var receivedVoices = 0L
     private var lastVoiceDurationMillis = 0L
     private var lastVoiceFile: File? = null
@@ -1131,6 +1136,26 @@ internal class BluetoothAccess(
 
     private fun hasGroup(): Boolean = try { NativeRuntime.policyEpoch() > 0L } catch (_: Exception) { false }
 
+    /**
+     * Installs a product-authorized roster for automatic enrollment. The native
+     * host validates the signed request first, so this never trusts a BLE
+     * address or a Dart-provided request identity. Passing null restores the
+     * deliberate open-lab behavior; an empty roster denies every applicant.
+     */
+    fun setEnrollmentAllowedMembers(members: Set<String>?, authorityEnabled: Boolean = true) {
+        enrollmentAllowedMembers = members
+        enrollmentAuthorityEnabled = authorityEnabled
+    }
+
+    private fun enrollmentRequestAllowed(request: ByteArray): Boolean {
+        val allowed = enrollmentAllowedMembers ?: return true
+        if (!enrollmentAuthorityEnabled) return false
+        val member = try { NativeRuntime.enrollmentRequestMember(request) }
+            catch (_: Exception) { return false }
+        val fingerprint = member.joinToString("") { "%02x".format(it.toInt() and 255) }
+        return fingerprint in allowed
+    }
+
     /** Handles public, one-time enrollment before a protected session exists. */
     private fun handleEnrollmentFromClient(raw: ByteArray, device: android.bluetooth.BluetoothDevice): Boolean {
         val kind = raw.firstOrNull()?.toInt()?.and(255) ?: return false
@@ -1155,6 +1180,11 @@ internal class BluetoothAccess(
                 closeServer(device.address)
                 val request = raw.copyOfRange(1, raw.size)
                 if (request.isEmpty() || request.size > 512) return true
+                if (!enrollmentRequestAllowed(request)) {
+                    enrollmentDetail = "Solicitud no autorizada para este convoy."
+                    Log.w(logTag, "Rejected enrollment outside the authorized roster")
+                    return true
+                }
                 // A repeat is idempotent: after an authorization the current
                 // policy contains the same iPhone certificate and can be installed.
                 val policy = try { NativeRuntime.issueEnrollment(identity.groupMaterial(), request) }

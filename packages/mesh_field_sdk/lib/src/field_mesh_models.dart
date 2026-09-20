@@ -234,6 +234,32 @@ abstract interface class FieldMeshSdk {
   Stream<FieldIncomingEvent> watchIncoming({Duration interval});
 }
 
+/// Product-owned admission scope for automatic group enrollment.
+///
+/// Values are public, lowercase 32-byte member fingerprints. The host verifies
+/// the signed enrollment request independently before it compares this roster,
+/// so callers cannot authorize a request by naming a radio address.
+final class FieldEnrollmentAccessPolicy {
+  FieldEnrollmentAccessPolicy({
+    required Iterable<String> authorizedMemberIds,
+    required this.authorityEnabled,
+  }) : authorizedMemberIds = Set.unmodifiable(authorizedMemberIds);
+
+  final Set<String> authorizedMemberIds;
+
+  /// Only the product's current authority may issue new membership policies.
+  /// A former leader retains no admission power after the product disables it.
+  final bool authorityEnabled;
+}
+
+/// Optional product control for automatic enrollment. A Convoy adapter sets
+/// this from its authenticated membership roster before it starts radios. The
+/// Mesh Lab can intentionally omit it to retain its explicit open experiment.
+abstract interface class FieldMeshEnrollmentAccessController {
+  Future<void> configureEnrollmentAccess(FieldEnrollmentAccessPolicy policy);
+  Future<void> clearEnrollmentAccess();
+}
+
 /// Optional capability for products that already persist their own action ID.
 ///
 /// The base [FieldMeshSdk] remains source-compatible for existing products.

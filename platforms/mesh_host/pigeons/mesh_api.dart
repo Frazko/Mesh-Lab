@@ -64,6 +64,18 @@ class GroupInfo {
   int epoch;
 }
 
+/// Product-owned admission boundary for automatic enrollment. Member IDs are
+/// public 32-byte fingerprints encoded as lowercase hex. The native host still
+/// verifies the request signature before comparing it with this roster.
+class EnrollmentAccessPolicy {
+  EnrollmentAccessPolicy({
+    required this.authorizedMemberIds,
+    required this.authorityEnabled,
+  });
+  List<String> authorizedMemberIds;
+  bool authorityEnabled;
+}
+
 class BluetoothInfo {
   BluetoothInfo({
     required this.available,
@@ -192,6 +204,10 @@ abstract class MeshHostApi {
   Uint8List issueEnrollment(Uint8List request);
   @async
   GroupInfo installPolicy(Uint8List policy);
+  @async
+  void configureEnrollmentAccess(EnrollmentAccessPolicy policy);
+  @async
+  void clearEnrollmentAccess();
   @async
   BluetoothInfo bluetoothInfo();
   @async

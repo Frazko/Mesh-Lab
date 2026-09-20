@@ -351,6 +351,19 @@ final class NativeRuntime {
     guard status == 0, buffer.len <= 12 * 1024, let pointer = buffer.ptr else { throw NativeFailure.status(status) }
     return Array(UnsafeBufferPointer(start: pointer, count: buffer.len))
   }
+  func enrollmentRequestMember(_ request: [UInt8]) throws -> [UInt8] {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard !request.isEmpty && request.count <= 512 else { throw NativeFailure.status(1) }
+    var member = [UInt8](repeating: 0, count: 32)
+    let status = request.withUnsafeBufferPointer { request in
+      member.withUnsafeMutableBufferPointer { output in
+        mesh_enrollment_request_member(request.baseAddress, request.count,
+                                       UInt64(Date().timeIntervalSince1970), output.baseAddress)
+      }
+    }
+    guard status == 0 else { throw NativeFailure.status(status) }
+    return member
+  }
   func installPolicy(_ policy: [UInt8]) throws -> Int64 {
     dispatchPrecondition(condition: .onQueue(queue))
     guard storeHandle != 0 && !policy.isEmpty && policy.count <= 12 * 1024 else { throw NativeFailure.status(1) }

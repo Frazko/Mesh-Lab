@@ -1682,6 +1682,21 @@ pub fn secure_store_issue_enrollment(
     })
 }
 
+/// Reads only the applicant's certified public member identity from a bounded
+/// enrollment request. Hosts use this before issuing a policy so a product can
+/// compare the request against its server-authorized roster. No private key,
+/// delivery key, group secret, or policy is exposed.
+pub fn enrollment_request_member(request_bytes: &[u8], now: u64) -> Result<MemberId, Error> {
+    guarded(|| {
+        if request_bytes.is_empty() || request_bytes.len() > 512 || now == 0 {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(verify_enrollment_request(request_bytes, now)
+            .map_err(|_| Error::InvalidArgument)?
+            .member)
+    })
+}
+
 pub fn secure_store_install_policy(
     handle: u64,
     bundle_bytes: &[u8],
@@ -2875,6 +2890,28 @@ pub unsafe extern "C" fn mesh_secure_store_issue_enrollment(
     status(result, |buffer| unsafe { *out = buffer })
 }
 /// # Safety
+/// The request references bounded public bytes. `out` points to 32 writable
+/// bytes and receives a verified public member identity only.
+#[no_mangle]
+pub unsafe extern "C" fn mesh_enrollment_request_member(
+    request: *const u8,
+    request_len: usize,
+    now: u64,
+    out: *mut u8,
+) -> i32 {
+    if request.is_null() || out.is_null() || request_len == 0 || request_len > 512 {
+        return Error::InvalidArgument as i32;
+    }
+    unsafe { std::ptr::write_bytes(out, 0, 32) }
+    status(
+        guarded(|| {
+            let request = unsafe { std::slice::from_raw_parts(request, request_len) };
+            enrollment_request_member(request, now)
+        }),
+        |member| unsafe { std::ptr::copy_nonoverlapping(member.0.as_ptr(), out, 32) },
+    )
+}
+/// # Safety
 /// Bundle references bounded public readable bytes. `out` is an aligned writable
 /// u64 and receives the installed epoch only after SQLCipher commits it.
 #[no_mangle]
@@ -3229,6 +3266,29 @@ mod tests {
         let invitation = secure_store_export_policy(owner, 101).unwrap();
         let request =
             create_enrollment_request_from_policy(&[10; 32], &[11; 32], &invitation, 101).unwrap();
+        assert_eq!(
+            enrollment_request_member(&request, 101),
+            Ok(MemberId(joiner_member.as_slice().try_into().unwrap()))
+        );
+        let mut exposed_member = [0u8; 32];
+        unsafe {
+            assert_eq!(
+                mesh_enrollment_request_member(
+                    request.as_ptr(),
+                    request.len(),
+                    101,
+                    exposed_member.as_mut_ptr(),
+                ),
+                0
+            );
+        }
+        assert_eq!(exposed_member.as_slice(), joiner_member.as_slice());
+        let mut tampered_request = request.clone();
+        *tampered_request.last_mut().unwrap() ^= 0x01;
+        assert_eq!(
+            enrollment_request_member(&tampered_request, 101),
+            Err(Error::InvalidArgument)
+        );
         let bundle = secure_store_issue_enrollment(owner, &[8; 32], &request, 101).unwrap();
         assert_eq!(secure_store_policy_epoch(owner, 101), Ok(2));
         let joiner =

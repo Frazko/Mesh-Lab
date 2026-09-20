@@ -56,6 +56,11 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private var subscribers = [UUID: CBCentral]()
   private var txCharacteristic: CBMutableCharacteristic?
   private var enrollmentDetail = ""
+  // nil is the Mesh Lab's deliberate open-enrollment behavior. Product
+  // adapters set an exact server-authorized roster before discovery; then a
+  // public request must prove it belongs to that roster before issuance.
+  private var enrollmentAllowedMembers: Set<String>?
+  private var enrollmentAuthorityEnabled = true
   private var recoveredStalePolicy = false
   private var reconnectWorkItem: DispatchWorkItem?
   private var receivedVoices: Int64 = 0
@@ -623,6 +628,24 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     runtime { try NativeRuntime.shared.policyEpoch() > 0 } == true
   }
 
+  /// Installs the product roster allowed to join automatically. `nil` is
+  /// reserved for Mesh Lab's explicit open-enrollment mode; an empty set denies
+  /// every applicant. This method must run on the UI/main queue with BLE state.
+  func setEnrollmentAllowedMembers(_ members: Set<String>?, authorityEnabled: Bool = true) {
+    enrollmentAllowedMembers = members
+    enrollmentAuthorityEnabled = authorityEnabled
+  }
+
+  private func enrollmentRequestAllowed(_ request: [UInt8]) -> Bool {
+    guard let allowed = enrollmentAllowedMembers else { return true }
+    guard enrollmentAuthorityEnabled else { return false }
+    guard let member = runtime({ try NativeRuntime.shared.enrollmentRequestMember(request) }) else {
+      return false
+    }
+    let fingerprint = member.map { String(format: "%02x", $0) }.joined()
+    return allowed.contains(fingerprint)
+  }
+
   /// Returns true when the frame was reserved for the one-time public enrollment exchange.
   private func handleEnrollmentFromClient(_ raw: [UInt8], central: CBCentral) -> Bool {
     guard let kind = raw.first, kind >= enrollmentHello, kind <= enrollmentPolicy else { return false }
@@ -637,6 +660,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     case enrollmentRequest:
       let request = Array(raw.dropFirst())
       guard !request.isEmpty, request.count <= 512 else { return true }
+      guard enrollmentRequestAllowed(request) else {
+        enrollmentDetail = "Solicitud no autorizada para este convoy."
+        return true
+      }
       // Repeating the same attempt is safe: if Android already authorized this
       // iPhone, the current public policy is exactly the bundle it needs.
       let policy = runtime { try NativeRuntime.shared.issueEnrollment(try SecureIdentity().groupMaterial(), request: request) }

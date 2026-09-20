@@ -1,7 +1,7 @@
 # Registro de huecos técnicos y de validación
 
-**Actualizado:** 2026-09-16
-**Estado de referencia:** avance global **64%** · bloque Wi‑Fi Aware **90%**.
+**Actualizado:** 2026-09-20
+**Estado de referencia:** avance global **71%** · bloque Wi‑Fi Aware **90%**.
 
 Este registro reúne los límites, implementaciones incompletas y pruebas aún no
 realizadas descubiertos durante el laboratorio. Un elemento se cierra solo con
@@ -57,6 +57,7 @@ cuenta como cierre de una conexión segura.
 
 | ID | Hueco | Estado actual y evidencia | Impacto | Criterio de cierre |
 |---|---|---|---|---|
+| SEC-04 | Autoridad dinámica del convoy | **Parcial.** El líder actual será la autoridad de producto; el creador la inicia por ser líder inicial. Rust/Android/iOS ya validan una solicitud firmada, comparan su huella pública con un roster autorizado por Convoy y exigen que el host conserve una marca de autoridad activa antes de emitir una política. La autoridad privada actual aún vive en el teléfono que creó la época. | Una transferencia de liderazgo no puede copiar una llave privada de forma segura. Sin una rotación, el líder nuevo no puede admitir miembros nuevos aunque Convoy ya lo haya designado. | Backend registra líder y época de malla; al transferirse o salir, la admisión se congela, el nuevo líder crea/recibe una autoridad nueva y una política rotada llega a miembros alcanzables con ACKs antes de reabrir admisión. |
 | SEC-01 | Auditoría externa del protocolo y hosts | **Pendiente.** Noise, certificados, roster firmado y SQLCipher tienen pruebas locales; no hay revisión independiente de las integraciones Swift/Kotlin ni del modelo de amenaza. | No se puede presentar como seguridad auditada. | Revisión externa de criptografía, transporte, almacenamiento y manejo de claves; hallazgos resueltos y reproducibles. |
 | SEC-02 | Límites ante grupo grande hostil | **Parcial.** Tamaños, chunks, TTL, caché y grado se acotan; faltan pruebas de presión reales con anuncios, inscripciones y objetos maliciosos. | Riesgo de consumo de batería/memoria o degradación ante radios cercanos ruidosos. | Fuzzing y pruebas de carga verifican rechazo temprano, cuotas y estabilidad de UI/radio. |
 | SEC-03 | Semántica de “entregado” | **Parcial.** La UI propia ya muestra cola, parcial y entregado a partir de receipts verificables por acción lógica. La caducidad ya se expone con conteo parcial verificable; falta el estado sin ruta y el contrato de reintento visible. | Una persona puede interpretar un mensaje como recibido por todo el grupo cuando no existe receipt para ello. | Estados y textos de UI vinculados a receipts verificables y pruebas de cada transición. |

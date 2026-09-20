@@ -6,7 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mesh_host/mesh_host.dart';
 import 'package:mesh_field_sdk/mesh_field_sdk.dart';
 
-class FakeGateway implements FieldMeshGateway {
+class FakeGateway
+    implements FieldMeshGateway, FieldMeshEnrollmentAccessGateway {
   bool secure = false;
   bool awareSecure = false;
   bool active = false;
@@ -22,6 +23,7 @@ class FakeGateway implements FieldMeshGateway {
   FieldDelivery? nextDelivery;
   List<FieldCertifiedPayload> verifiedIncoming = const [];
   List<FieldCertifiedVoicePayload> verifiedIncomingVoice = const [];
+  FieldEnrollmentAccessPolicy? enrollmentAccess;
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -60,6 +62,18 @@ class FakeGateway implements FieldMeshGateway {
   @override
   Future<FieldGroup> groupInfo() async =>
       const FieldGroup(configured: true, epoch: 1);
+  @override
+  Future<void> configureEnrollmentAccess(
+    FieldEnrollmentAccessPolicy policy,
+  ) async {
+    enrollmentAccess = policy;
+  }
+
+  @override
+  Future<void> clearEnrollmentAccess() async {
+    enrollmentAccess = null;
+  }
+
   @override
   Future<FieldDelivery?> delivery(String logicalId) async => noDeliveryEvidence
       ? null
@@ -272,6 +286,35 @@ void main() {
       expect((await sdk.prepareIdentity()).storage, 'test');
       expect((await sdk.groupInfo()).configured, isTrue);
       expect((await sdk.createGroup()).epoch, 1);
+    },
+  );
+
+  test(
+    'automatic enrollment access accepts only a bounded public roster',
+    () async {
+      final gateway = FakeGateway();
+      final sdk = FieldMeshClient(gateway: gateway);
+      const member =
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+      await sdk.configureEnrollmentAccess(
+        FieldEnrollmentAccessPolicy(
+          authorizedMemberIds: [member],
+          authorityEnabled: true,
+        ),
+      );
+      expect(gateway.enrollmentAccess?.authorizedMemberIds, {member});
+      await sdk.clearEnrollmentAccess();
+      expect(gateway.enrollmentAccess, isNull);
+      await expectLater(
+        sdk.configureEnrollmentAccess(
+          FieldEnrollmentAccessPolicy(
+            authorizedMemberIds: ['not-a-member'],
+            authorityEnabled: false,
+          ),
+        ),
+        throwsArgumentError,
+      );
     },
   );
 

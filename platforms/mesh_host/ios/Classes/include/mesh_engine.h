@@ -77,6 +77,9 @@ int32_t mesh_secure_store_create_group(uint64_t handle, const uint8_t *identity_
 int32_t mesh_secure_store_issue_enrollment(uint64_t handle, const uint8_t *identity_seed,
                                            size_t identity_seed_len, const uint8_t *request,
                                            size_t request_len, uint64_t now, MeshBuffer *out);
+/* Validates a public enrollment request and returns only its applicant member ID. */
+int32_t mesh_enrollment_request_member(const uint8_t *request, size_t request_len,
+                                       uint64_t now, uint8_t *out);
 int32_t mesh_secure_store_install_policy(uint64_t handle, const uint8_t *bundle,
                                          size_t bundle_len, uint64_t now, uint64_t *out);
 int32_t mesh_secure_store_export_policy(uint64_t handle, uint64_t now, MeshBuffer *out);
