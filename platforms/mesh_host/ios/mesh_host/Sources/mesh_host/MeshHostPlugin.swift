@@ -95,15 +95,15 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
     // its former authenticated session after the encrypted Field store moves.
     if scopeChanged {
       onMain {
-        _ = bluetooth.stopDiscovery()
-        _ = aware.stop(hasGroup: false)
+        _ = self.bluetooth.stopDiscovery()
+        _ = self.aware.stop(hasGroup: false)
       }
     }
     try await execute {
       try NativeRuntime.shared.selectProductScope(policy.scopeId, material: try SecureIdentity().storeMaterial())
     }
     onMain {
-      bluetooth.setEnrollmentAllowedMembers(
+      self.bluetooth.setEnrollmentAllowedMembers(
         members,
         authorityEnabled: policy.authorityEnabled
       )
@@ -113,9 +113,9 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
     // Clearing product authority also closes every direct link before its
     // cryptographic store is released.
     onMain {
-      _ = bluetooth.stopDiscovery()
-      _ = aware.stop(hasGroup: false)
-      bluetooth.setEnrollmentAllowedMembers(nil)
+      _ = self.bluetooth.stopDiscovery()
+      _ = self.aware.stop(hasGroup: false)
+      self.bluetooth.setEnrollmentAllowedMembers(nil)
     }
     try await execute { NativeRuntime.shared.clearProductScope() }
   }
