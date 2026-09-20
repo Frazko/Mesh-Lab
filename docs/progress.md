@@ -1,6 +1,6 @@
 # Avance del plan
 
-Estado vigente: 2026-09-20. **71% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-20. **72% global estimado · 90% Wi‑Fi Aware.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
 
@@ -20,16 +20,21 @@ autorizadas y si este teléfono conserva autoridad de incorporación; Mesh Lab
 conserva su modo experimental de incorporación abierta. Un exlíder queda
 bloqueado por el host aunque conserve la llave local de una época anterior.
 
-Las pruebas unitarias validan que la huella procede de una solicitud firmada y
-que una alterada falla; el puente JNI compila con el motor, y las 27 pruebas del
-SDK más su análisis pasaron. Pigeon se regeneró para Dart/Kotlin/Swift y el
-host pasó análisis Dart. Falta compilar los binarios móviles actualizados y
-aplicar el adaptador Convoy que cargará el roster real. La rotación de autoridad
-tras una transferencia de liderazgo sigue abierta: los miembros existentes
-pueden mantener su enlace durante el cambio, pero la admisión debe detenerse y
-una nueva época debe ser emitida por el nuevo líder antes de aceptar miembros.
-No se cuenta como cerrada hasta que esa migración tenga protocolo, backend y
-prueba física.
+Las pruebas unitarias validan que la huella procede de una solicitud firmada,
+que una alterada, sin instante válido o sobredimensionada falla y que la FFI limpia su salida
+antes de devolver un error. El puente JNI compila con el motor. La fachada SDK
+suma 29 pruebas y análisis limpio: acepta sólo 50 huellas minúsculas, rechaza
+hosts antiguos que no pueden imponer la política y conserva una limpieza
+compatible. En Convoy, 112 pruebas cercanas cubren el flujo integrado en
+memoria roster→binding→adaptador→SDK→host, sólo una creación de grupo por
+líder, miembro sin autoridad, salida y los fallos de cada frontera. Pigeon se
+regeneró para Dart/Kotlin/Swift y el host pasó análisis Dart. Falta compilar los
+binarios móviles actualizados y ejecutar la campaña física; la rotación de
+autoridad tras una transferencia de liderazgo sigue abierta: los miembros
+existentes pueden mantener su enlace durante el cambio, pero la admisión debe
+detenerse y una nueva época debe ser emitida por el nuevo líder antes de aceptar
+miembros. No se cuenta como cerrada hasta que esa migración tenga protocolo,
+backend y prueba física.
 
 ## Entrega agregada por conversación
 

@@ -277,6 +277,11 @@ class FakeHostApi extends MeshHostApi {
   Future<bool> playVoice(String objectId) async => true;
 }
 
+final class _LegacyGateway implements FieldMeshGateway {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   test(
     'identity and group operations remain available before radio activation',
@@ -317,6 +322,55 @@ void main() {
       );
     },
   );
+
+  test('rejects uppercase and more than fifty enrollment identities', () async {
+    final sdk = FieldMeshClient(gateway: FakeGateway());
+    final overCapacity = List.generate(
+      51,
+      (index) => index.toRadixString(16).padLeft(64, '0'),
+    );
+
+    await expectLater(
+      sdk.configureEnrollmentAccess(
+        FieldEnrollmentAccessPolicy(
+          authorizedMemberIds: const [
+            'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          ],
+          authorityEnabled: true,
+        ),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      sdk.configureEnrollmentAccess(
+        FieldEnrollmentAccessPolicy(
+          authorizedMemberIds: overCapacity,
+          authorityEnabled: true,
+        ),
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('does not pretend a legacy host can enforce product enrollment', () async {
+    final sdk = FieldMeshClient(gateway: _LegacyGateway());
+
+    await expectLater(
+      sdk.configureEnrollmentAccess(
+        FieldEnrollmentAccessPolicy(
+          authorizedMemberIds: const [
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+          ],
+          authorityEnabled: false,
+        ),
+      ),
+      throwsUnsupportedError,
+    );
+
+    // Older consumers can still close their own session during a staged host
+    // upgrade; clearing an absent product gate never opens one implicitly.
+    await sdk.clearEnrollmentAccess();
+  });
 
   test(
     'products see only a connected secure session after authenticated radio',

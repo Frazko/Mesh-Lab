@@ -3283,6 +3283,25 @@ mod tests {
             );
         }
         assert_eq!(exposed_member.as_slice(), joiner_member.as_slice());
+        let mut rejected_member = [0x55u8; 32];
+        unsafe {
+            assert_eq!(
+                mesh_enrollment_request_member(
+                    request.as_ptr(),
+                    request.len(),
+                    0,
+                    rejected_member.as_mut_ptr(),
+                ),
+                Error::InvalidArgument as i32,
+            );
+        }
+        // A caller must never accidentally reuse a previous identity after a
+        // rejected request. The FFI clears its output before validation.
+        assert_eq!(rejected_member, [0; 32]);
+        assert_eq!(
+            enrollment_request_member(&vec![0; 513], 101),
+            Err(Error::InvalidArgument)
+        );
         let mut tampered_request = request.clone();
         *tampered_request.last_mut().unwrap() ^= 0x01;
         assert_eq!(

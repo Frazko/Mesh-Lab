@@ -1,7 +1,7 @@
 # Registro de huecos técnicos y de validación
 
 **Actualizado:** 2026-09-20
-**Estado de referencia:** avance global **71%** · bloque Wi‑Fi Aware **90%**.
+**Estado de referencia:** avance global **72%** · bloque Wi‑Fi Aware **90%**.
 
 Este registro reúne los límites, implementaciones incompletas y pruebas aún no
 realizadas descubiertos durante el laboratorio. Un elemento se cierra solo con
