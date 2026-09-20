@@ -101,6 +101,16 @@ internal object NativeRuntime {
             )
         } finally { material.wipe() }
     }
+    /** A Boolean-only authority probe. The active authority key and roster
+     * remain inside Rust, so an ex-leader cannot claim admission capability. */
+    fun canIssueEnrollment(material: SecureIdentity.GroupMaterial): Boolean {
+        check(storeHandle != 0L) { "SECURE_STORE_UNAVAILABLE" }
+        return try {
+            NativeBridge.secureStoreCanIssueEnrollment(
+                storeHandle, material.identitySeed, System.currentTimeMillis() / 1000,
+            )
+        } finally { material.wipe() }
+    }
     fun enrollmentRequestMember(request: ByteArray): ByteArray {
         check(request.isNotEmpty() && request.size <= 512) { "MESH_1" }
         val member = NativeBridge.enrollmentRequestMember(request, System.currentTimeMillis() / 1000)
@@ -320,6 +330,12 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
     override suspend fun issueEnrollment(request: ByteArray): ByteArray = withContext(NativeRuntime.dispatcher) {
         try { NativeRuntime.issueEnrollment(identity.groupMaterial(), request) }
         catch (e: Exception) { throw FlutterError("GROUP_TRANSFER_FAILED", "No se pudo emitir la inscripción.", null) }
+    }
+    override suspend fun canIssueEnrollment(): Boolean = withContext(NativeRuntime.dispatcher) {
+        try { NativeRuntime.canIssueEnrollment(identity.groupMaterial()) }
+        catch (e: Exception) {
+            throw FlutterError("GROUP_AUTHORITY_UNAVAILABLE", "No se pudo comprobar la autoridad del grupo.", null)
+        }
     }
     override suspend fun installPolicy(policy: ByteArray): GroupInfo = withContext(NativeRuntime.dispatcher) {
         try {

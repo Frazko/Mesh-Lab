@@ -87,6 +87,7 @@ abstract interface class FieldMeshGateway {
 abstract interface class FieldMeshEnrollmentAccessGateway {
   Future<void> configureEnrollmentAccess(FieldEnrollmentAccessPolicy policy);
   Future<void> clearEnrollmentAccess();
+  Future<bool> canIssueEnrollment();
 }
 
 /// Default gateway for iOS and Android. It maps mutable Pigeon DTOs into
@@ -150,6 +151,9 @@ final class MeshHostGateway
 
   @override
   Future<void> clearEnrollmentAccess() => _api.clearEnrollmentAccess();
+
+  @override
+  Future<bool> canIssueEnrollment() => _api.canIssueEnrollment();
   @override
   Future<FieldBluetoothStatus> bluetoothStatus() async =>
       _bluetooth(await _api.bluetoothInfo());
@@ -297,6 +301,17 @@ final class FieldMeshClient
         : null;
     if (gateway == null) return;
     await gateway.clearEnrollmentAccess();
+  }
+
+  @override
+  Future<bool> canIssueEnrollment() async {
+    final gateway = _gateway is FieldMeshEnrollmentAccessGateway
+        ? _gateway as FieldMeshEnrollmentAccessGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError('El host no admite comprobar la autoridad.');
+    }
+    return gateway.canIssueEnrollment();
   }
 
   @override

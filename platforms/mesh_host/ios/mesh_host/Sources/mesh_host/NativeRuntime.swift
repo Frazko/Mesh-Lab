@@ -400,6 +400,26 @@ final class NativeRuntime {
     guard status == 0, buffer.len <= 12 * 1024, let pointer = buffer.ptr else { throw NativeFailure.status(status) }
     return Array(UnsafeBufferPointer(start: pointer, count: buffer.len))
   }
+  /// Returns only whether this Keychain-backed identity still matches the
+  /// authority certified in the active policy. Keys and roster remain native.
+  func canIssueEnrollment(_ material: GroupMaterial) throws -> Bool {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard storeHandle != 0 else { throw NativeFailure.status(3) }
+    var material = material
+    defer { material.wipe() }
+    var canIssue: UInt8 = 0
+    let status = material.identitySeed.withUnsafeBytes { identity in
+      mesh_secure_store_can_issue_enrollment(
+        storeHandle,
+        identity.bindMemory(to: UInt8.self).baseAddress,
+        identity.count,
+        UInt64(Date().timeIntervalSince1970),
+        &canIssue
+      )
+    }
+    guard status == 0 else { throw NativeFailure.status(status) }
+    return canIssue == 1
+  }
   func enrollmentRequestMember(_ request: [UInt8]) throws -> [UInt8] {
     dispatchPrecondition(condition: .onQueue(queue))
     guard !request.isEmpty && request.count <= 512 else { throw NativeFailure.status(1) }

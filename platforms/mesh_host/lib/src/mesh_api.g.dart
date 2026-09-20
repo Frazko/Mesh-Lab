@@ -397,6 +397,9 @@ class EnrollmentAccessPolicy {
     required this.authorityEnabled,
   });
 
+  /// Opaque, product-owned 128-bit scope. It selects a separate encrypted
+  /// Field store so policies from two product groups cannot share a radio
+  /// group merely because they use the same phone identity.
   String scopeId;
 
   List<String> authorizedMemberIds;
@@ -432,9 +435,7 @@ class EnrollmentAccessPolicy {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(scopeId, other.scopeId) &&
-        _deepEquals(authorizedMemberIds, other.authorizedMemberIds) &&
-        _deepEquals(authorityEnabled, other.authorityEnabled);
+    return _deepEquals(scopeId, other.scopeId) && _deepEquals(authorizedMemberIds, other.authorizedMemberIds) && _deepEquals(authorityEnabled, other.authorityEnabled);
   }
 
   @override
@@ -1098,6 +1099,27 @@ class MeshHostApi {
     )
     ;
     return pigeonVar_replyValue! as Uint8List;
+  }
+
+  /// Reports whether this identity is the authority certified in the current
+  /// group policy. It never exposes authority keys or membership material.
+  Future<bool> canIssueEnrollment() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.canIssueEnrollment$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
   }
 
   Future<GroupInfo> installPolicy(Uint8List policy) async {

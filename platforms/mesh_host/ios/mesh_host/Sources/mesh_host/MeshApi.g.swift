@@ -946,6 +946,9 @@ protocol MeshHostApi {
   func exportInvitation() async throws -> FlutterStandardTypedData
   func createEnrollmentRequest(invitation: FlutterStandardTypedData) async throws -> FlutterStandardTypedData
   func issueEnrollment(request: FlutterStandardTypedData) async throws -> FlutterStandardTypedData
+  /// Reports whether this identity is the authority certified in the current
+  /// group policy. It never exposes authority keys or membership material.
+  func canIssueEnrollment() async throws -> Bool
   func installPolicy(policy: FlutterStandardTypedData) async throws -> GroupInfo
   func configureEnrollmentAccess(policy: EnrollmentAccessPolicy) async throws
   func clearEnrollmentAccess() async throws
@@ -1083,6 +1086,23 @@ class MeshHostApiSetup {
       }
     } else {
       issueEnrollmentChannel.setMessageHandler(nil)
+    }
+    /// Reports whether this identity is the authority certified in the current
+    /// group policy. It never exposes authority keys or membership material.
+    let canIssueEnrollmentChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.canIssueEnrollment\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      canIssueEnrollmentChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            let result = try await api.canIssueEnrollment()
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      canIssueEnrollmentChannel.setMessageHandler(nil)
     }
     let installPolicyChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.installPolicy\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

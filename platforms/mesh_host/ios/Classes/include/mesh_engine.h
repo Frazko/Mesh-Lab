@@ -77,6 +77,11 @@ int32_t mesh_secure_store_create_group(uint64_t handle, const uint8_t *identity_
 int32_t mesh_secure_store_issue_enrollment(uint64_t handle, const uint8_t *identity_seed,
                                            size_t identity_seed_len, const uint8_t *request,
                                            size_t request_len, uint64_t now, MeshBuffer *out);
+/* Returns one capability bit: whether this local identity is the active
+ * enrollment authority. It exposes neither a key nor the group roster. */
+int32_t mesh_secure_store_can_issue_enrollment(uint64_t handle, const uint8_t *identity_seed,
+                                               size_t identity_seed_len, uint64_t now,
+                                               uint8_t *out);
 /* Validates a public enrollment request and returns only its applicant member ID. */
 int32_t mesh_enrollment_request_member(const uint8_t *request, size_t request_len,
                                        uint64_t now, uint8_t *out);

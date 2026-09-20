@@ -639,6 +639,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private func enrollmentRequestAllowed(_ request: [UInt8]) -> Bool {
     guard let allowed = enrollmentAllowedMembers else { return true }
     guard enrollmentAuthorityEnabled else { return false }
+    guard runtime({ try NativeRuntime.shared.canIssueEnrollment(try SecureIdentity().groupMaterial()) }) == true else {
+      enrollmentDetail = "La autoridad del convoy cambió y requiere rotación segura."
+      return false
+    }
     guard let member = runtime({ try NativeRuntime.shared.enrollmentRequestMember(request) }) else {
       return false
     }

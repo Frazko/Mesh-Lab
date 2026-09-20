@@ -6,7 +6,7 @@ La tabla inicial conserva la línea base del plan; las secciones fechadas poster
 
 ## C3 — admisión automática gobernada por Convoy
 
-**Actualizado: 2026-09-20. C3 local: 72%; gate operativo: pendiente.** La
+**Actualizado: 2026-09-20. C3 local: 76%; gate operativo: pendiente.** La
 autoridad de producto aprobada es el **líder actual del convoy**: el creador
 comienza como líder y crea la autoridad inicial, pero esa propiedad no queda
 atada de forma permanente a su teléfono. Antes de que el host emita una
@@ -16,18 +16,20 @@ esa huella con un roster explícito que el adaptador de producto instala; una
 solicitud que no figura en el roster se rechaza antes de tocar la llave privada
 de la autoridad. El nuevo control opcional `FieldMeshEnrollmentAccessController`
 mantiene al SDK reutilizable: un producto aporta sólo huellas públicas
-autorizadas y si este teléfono conserva autoridad de incorporación; Mesh Lab
-conserva su modo experimental de incorporación abierta. Un exlíder queda
+autorizadas y puede consultar únicamente un bit de capacidad: si la identidad
+protegida local coincide con la autoridad certificada de la época activa. Mesh
+Lab conserva su modo experimental de incorporación abierta. Un exlíder queda
 bloqueado por el host aunque conserve la llave local de una época anterior.
 
 Las pruebas unitarias validan que la huella procede de una solicitud firmada,
-que una alterada, sin instante válido o sobredimensionada falla y que la FFI limpia su salida
-antes de devolver un error. El puente JNI compila con el motor. La fachada SDK
-suma 29 pruebas y análisis limpio: acepta sólo 50 huellas minúsculas, rechaza
+que una alterada, sin instante válido o sobredimensionada falla, que la FFI limpia su salida
+antes de devolver un error y que sólo la semilla de la autoridad activa recibe capacidad de
+incorporación. El puente JNI compila con el motor. La fachada SDK
+suma 30 pruebas y análisis limpio: acepta sólo 50 huellas minúsculas, rechaza
 hosts antiguos que no pueden imponer la política y conserva una limpieza
-compatible. En Convoy, 115 pruebas cercanas cubren el flujo integrado en
+compatible. En Convoy, 116 pruebas cercanas cubren el flujo integrado en
 memoria roster→binding→adaptador→SDK→host, sólo una creación de grupo por
-líder, miembro sin autoridad, salida y los fallos de cada frontera. Pigeon se
+líder, miembro sin autoridad, salida, el líder promovido sin autoridad de la época y los fallos de cada frontera. Pigeon se
 regeneró para Dart/Kotlin/Swift y el host pasó análisis Dart. El framework Apple
 se recompiló y el build iOS de dispositivo pasó, junto con el host Swift. El
 host Android actualizado también compiló; falta ejecutar la campaña física. La rotación de
@@ -51,9 +53,8 @@ cifrado para auditoría y una futura decisión de reingreso, pero no puede ser
 el grupo radio activo de B. La prueba de integración Convoy A→B valida la
 secuencia salida→limpieza→nuevo grupo y que ambos scopes generan grupos
 independientes; las 29 pruebas del SDK validan propagación/forma del scope y
-su rechazo si no es hexadecimal de 32 caracteres. Falta la compilación nativa
-completa y una campaña física que cambie de convoy con Bluetooth y Aware
-conectados; hasta entonces SEC-05 no se marca como cierre operativo.
+su rechazo si no es hexadecimal de 32 caracteres. Android e iOS ya compilaron con el host de scope; falta una campaña física que cambie
+de convoy con Bluetooth y Aware conectados; hasta entonces SEC-05 no se marca como cierre operativo.
 
 ## Entrega agregada por conversación
 

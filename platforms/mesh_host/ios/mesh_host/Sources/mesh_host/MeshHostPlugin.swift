@@ -74,6 +74,11 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
         try SecureIdentity().groupMaterial(), request: Array(request.data))))
     }
   }
+  func canIssueEnrollment() async throws -> Bool {
+    try await execute {
+      try NativeRuntime.shared.canIssueEnrollment(try SecureIdentity().groupMaterial())
+    }
+  }
   func installPolicy(policy: FlutterStandardTypedData) async throws -> GroupInfo {
     try await execute {
       let epoch = try NativeRuntime.shared.installPolicy(Array(policy.data))

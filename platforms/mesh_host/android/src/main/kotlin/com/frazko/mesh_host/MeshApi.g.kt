@@ -981,6 +981,11 @@ interface MeshHostApi {
   suspend fun exportInvitation(): ByteArray
   suspend fun createEnrollmentRequest(invitation: ByteArray): ByteArray
   suspend fun issueEnrollment(request: ByteArray): ByteArray
+  /**
+   * Reports whether this identity is the authority certified in the current
+   * group policy. It never exposes authority keys or membership material.
+   */
+  suspend fun canIssueEnrollment(): Boolean
   suspend fun installPolicy(policy: ByteArray): GroupInfo
   suspend fun configureEnrollmentAccess(policy: EnrollmentAccessPolicy)
   suspend fun clearEnrollmentAccess()
@@ -1125,6 +1130,23 @@ interface MeshHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.issueEnrollment(requestArg))
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.canIssueEnrollment$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.canIssueEnrollment())
               } catch (exception: Throwable) {
                 MeshApiPigeonUtils.wrapError(exception)
               }

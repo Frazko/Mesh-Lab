@@ -264,6 +264,11 @@ final class FieldEnrollmentAccessPolicy {
 abstract interface class FieldMeshEnrollmentAccessController {
   Future<void> configureEnrollmentAccess(FieldEnrollmentAccessPolicy policy);
   Future<void> clearEnrollmentAccess();
+
+  /// True only if this phone's protected identity is the authority certified
+  /// in the active Field policy. A product must fail closed after a leader
+  /// change until it completes a signed authority rotation.
+  Future<bool> canIssueEnrollment();
 }
 
 /// Optional capability for products that already persist their own action ID.

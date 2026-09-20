@@ -1050,6 +1050,37 @@ pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreIssueE
     }
 }
 #[no_mangle]
+pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreCanIssueEnrollment(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    identity_seed: JByteArray,
+    now: jlong,
+) -> jboolean {
+    let result = mesh_ffi_c::guarded(|| {
+        if now <= 0
+            || env
+                .get_array_length(&identity_seed)
+                .map_err(|_| mesh_types_error())?
+                != 32
+        {
+            return Err(mesh_types_error());
+        }
+        let identity_seed = zeroize::Zeroizing::new(
+            env.convert_byte_array(&identity_seed)
+                .map_err(|_| mesh_types_error())?,
+        );
+        mesh_ffi_c::secure_store_can_issue_enrollment(handle as u64, &identity_seed, now as u64)
+    });
+    match result {
+        Ok(can_issue) => u8::from(can_issue),
+        Err(error) => {
+            failure(&mut env, error as i32);
+            0
+        }
+    }
+}
+#[no_mangle]
 pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_enrollmentRequestMember(
     mut env: JNIEnv,
     _class: JClass,

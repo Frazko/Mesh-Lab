@@ -208,6 +208,11 @@ abstract class MeshHostApi {
   Uint8List createEnrollmentRequest(Uint8List invitation);
   @async
   Uint8List issueEnrollment(Uint8List request);
+
+  /// Reports whether this identity is the authority certified in the current
+  /// group policy. It never exposes authority keys or membership material.
+  @async
+  bool canIssueEnrollment();
   @async
   GroupInfo installPolicy(Uint8List policy);
   @async

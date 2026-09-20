@@ -47,6 +47,7 @@ internal object NativeBridge {
     @JvmStatic external fun secureSessionRelease(handle: Long)
     @JvmStatic external fun secureStoreCreateGroup(handle: Long, identitySeed: ByteArray, deliverySeed: ByteArray, member: ByteArray, now: Long): Long
     @JvmStatic external fun secureStoreIssueEnrollment(handle: Long, identitySeed: ByteArray, request: ByteArray, now: Long): ByteArray
+    @JvmStatic external fun secureStoreCanIssueEnrollment(handle: Long, identitySeed: ByteArray, now: Long): Boolean
     @JvmStatic external fun enrollmentRequestMember(request: ByteArray, now: Long): ByteArray
     @JvmStatic external fun secureStoreInstallPolicy(handle: Long, bundle: ByteArray, now: Long): Long
     @JvmStatic external fun secureStoreExportPolicy(handle: Long, now: Long): ByteArray

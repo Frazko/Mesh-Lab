@@ -24,6 +24,7 @@ class FakeGateway
   List<FieldCertifiedPayload> verifiedIncoming = const [];
   List<FieldCertifiedVoicePayload> verifiedIncomingVoice = const [];
   FieldEnrollmentAccessPolicy? enrollmentAccess;
+  bool enrollmentAuthority = true;
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -73,6 +74,9 @@ class FakeGateway
   Future<void> clearEnrollmentAccess() async {
     enrollmentAccess = null;
   }
+
+  @override
+  Future<bool> canIssueEnrollment() async => enrollmentAuthority;
 
   @override
   Future<FieldDelivery?> delivery(String logicalId) async => noDeliveryEvidence
@@ -325,6 +329,22 @@ void main() {
           ),
         ),
         throwsArgumentError,
+      );
+    },
+  );
+
+  test(
+    'reports authority only through the optional enrollment boundary',
+    () async {
+      final gateway = FakeGateway()..enrollmentAuthority = false;
+      final sdk = FieldMeshClient(gateway: gateway);
+
+      expect(await sdk.canIssueEnrollment(), isFalse);
+      gateway.enrollmentAuthority = true;
+      expect(await sdk.canIssueEnrollment(), isTrue);
+      await expectLater(
+        FieldMeshClient(gateway: _LegacyGateway()).canIssueEnrollment(),
+        throwsUnsupportedError,
       );
     },
   );

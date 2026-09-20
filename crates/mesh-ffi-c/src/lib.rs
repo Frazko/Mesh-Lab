@@ -1682,6 +1682,39 @@ pub fn secure_store_issue_enrollment(
     })
 }
 
+/// Reports whether the supplied local identity is the active policy authority.
+///
+/// This deliberately returns only a capability bit: callers never receive the
+/// authority public key, the active roster, or any private material. Products
+/// use it to fail closed when a leadership change has not yet performed a
+/// signed authority rotation.
+pub fn secure_store_can_issue_enrollment(
+    handle: u64,
+    identity_seed: &[u8],
+    now: u64,
+) -> Result<bool, Error> {
+    guarded(|| {
+        if identity_seed.len() != 32 || now == 0 {
+            return Err(Error::InvalidArgument);
+        }
+        let mut seed = zeroize::Zeroizing::new([0; 32]);
+        seed.copy_from_slice(identity_seed);
+        let identity = IdentitySigningKey::import(seed);
+        let mut registry = stores().lock().map_err(|_| Error::InternalInvariant)?;
+        let store = registry
+            .stores
+            .get_mut(&handle)
+            .ok_or(Error::InvalidHandle)?;
+        let Some(active) = store
+            .active_policy(now)
+            .map_err(|_| Error::InternalInvariant)?
+        else {
+            return Ok(false);
+        };
+        Ok(active.authority == identity.public_key())
+    })
+}
+
 /// Reads only the applicant's certified public member identity from a bounded
 /// enrollment request. Hosts use this before issuing a policy so a product can
 /// compare the request against its server-authorized roster. No private key,
@@ -2890,6 +2923,32 @@ pub unsafe extern "C" fn mesh_secure_store_issue_enrollment(
     status(result, |buffer| unsafe { *out = buffer })
 }
 /// # Safety
+/// `identity_seed` references exactly 32 readable bytes. `out` points to one
+/// writable byte and receives only a capability bit; no key or roster data
+/// crosses this boundary.
+#[no_mangle]
+pub unsafe extern "C" fn mesh_secure_store_can_issue_enrollment(
+    handle: u64,
+    identity_seed: *const u8,
+    identity_seed_len: usize,
+    now: u64,
+    out: *mut u8,
+) -> i32 {
+    if out.is_null() || identity_seed.is_null() || identity_seed_len != 32 {
+        return Error::InvalidArgument as i32;
+    }
+    unsafe {
+        *out = 0;
+    }
+    status(
+        guarded(|| {
+            let seed = unsafe { std::slice::from_raw_parts(identity_seed, identity_seed_len) };
+            secure_store_can_issue_enrollment(handle, seed, now)
+        }),
+        |can_issue| unsafe { *out = u8::from(can_issue) },
+    )
+}
+/// # Safety
 /// The request references bounded public bytes. `out` points to 32 writable
 /// bytes and receives a verified public member identity only.
 #[no_mangle]
@@ -3243,6 +3302,52 @@ mod tests {
             secure_store_create_group(handle, &[8; 32], &[9; 32], &member, 101),
             Err(Error::StaleRequest)
         );
+        assert_eq!(secure_store_release(handle), Ok(()));
+        let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn only_the_active_authority_identity_can_issue_enrollment() {
+        let path = std::env::temp_dir().join(format!(
+            "mesh-ffi-authority-capability-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let owner_member = identity_public(&[18; 32]).unwrap();
+        let handle = secure_store_open(&[19; 32], &owner_member, path.to_str().unwrap()).unwrap();
+        // A store without an active policy never presents admission authority.
+        assert_eq!(
+            secure_store_can_issue_enrollment(handle, &[18; 32], 100),
+            Ok(false)
+        );
+        assert_eq!(
+            secure_store_create_group(handle, &[18; 32], &[20; 32], &owner_member, 100),
+            Ok(1)
+        );
+        assert_eq!(
+            secure_store_can_issue_enrollment(handle, &[18; 32], 101),
+            Ok(true)
+        );
+        assert_eq!(
+            secure_store_can_issue_enrollment(handle, &[21; 32], 101),
+            Ok(false)
+        );
+
+        // The C ABI zeroes the capability output before failure and exposes no
+        // authority key or roster detail to a native host.
+        let mut capability = 0xff;
+        unsafe {
+            assert_eq!(
+                mesh_secure_store_can_issue_enrollment(
+                    handle,
+                    [18; 32].as_ptr(),
+                    32,
+                    0,
+                    &mut capability,
+                ),
+                Error::InvalidArgument as i32,
+            );
+        }
+        assert_eq!(capability, 0);
         assert_eq!(secure_store_release(handle), Ok(()));
         let _ = std::fs::remove_file(path);
     }

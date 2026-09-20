@@ -1154,6 +1154,10 @@ internal class BluetoothAccess(
     private fun enrollmentRequestAllowed(request: ByteArray): Boolean {
         val allowed = enrollmentAllowedMembers ?: return true
         if (!enrollmentAuthorityEnabled) return false
+        if (try { !NativeRuntime.canIssueEnrollment(identity.groupMaterial()) } catch (_: Exception) { true }) {
+            enrollmentDetail = "La autoridad del convoy cambió y requiere rotación segura."
+            return false
+        }
         val member = try { NativeRuntime.enrollmentRequestMember(request) }
             catch (_: Exception) { return false }
         val fingerprint = member.joinToString("") { "%02x".format(it.toInt() and 255) }
