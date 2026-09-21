@@ -280,6 +280,7 @@ final class MeshHostGateway
 final class FieldMeshClient
     implements
         FieldMeshSdk,
+        FieldMeshPresenceController,
         FieldMeshActionSender,
         FieldMeshVoiceContextSender,
         FieldMeshEnrollmentAccessController,
@@ -469,6 +470,13 @@ final class FieldMeshClient
     final voice = await _gateway.voiceStatus();
     return _session(bluetooth, aware, voice);
   }
+
+  /// Keeps the protected nearby group discoverable while a product continues
+  /// using its cloud route. The host already owns battery-aware BLE/Wi-Fi
+  /// Aware discovery and native multi-hop relay custody, so this is deliberately
+  /// the same safe start path as [connect], not a second radio session.
+  @override
+  Future<FieldSessionStatus> maintainPresence() => connect();
 
   @override
   Future<FieldSessionStatus> leave() async {

@@ -234,6 +234,21 @@ abstract interface class FieldMeshSdk {
   Stream<FieldIncomingEvent> watchIncoming({Duration interval});
 }
 
+/// Optional capability for products that keep a local field group available
+/// while their cloud route remains healthy.
+///
+/// This does not share, proxy, or tether Internet. It keeps only the signed
+/// nearby radio custody alive so an authenticated neighbour that loses
+/// coverage can still exchange its own group actions. Products retain their
+/// normal server route in parallel and use the same logical action ID on both
+/// transports when they choose dual delivery.
+///
+/// It is separate from [FieldMeshSdk] to preserve source compatibility for
+/// integrations that intentionally activate nearby radios only on demand.
+abstract interface class FieldMeshPresenceController {
+  Future<FieldSessionStatus> maintainPresence();
+}
+
 /// Product-owned admission scope for automatic group enrollment.
 ///
 /// Member IDs are public, lowercase 32-byte fingerprints. The separate scope

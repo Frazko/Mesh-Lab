@@ -935,6 +935,18 @@ void main() {
     },
   );
 
+  test('maintains nearby presence without replacing the cloud route', () async {
+    final gateway = FakeGateway();
+    final sdk = FieldMeshClient(gateway: gateway);
+
+    final session = await sdk.maintainPresence();
+
+    expect(sdk, isA<FieldMeshPresenceController>());
+    expect(gateway.active, isTrue);
+    expect(session.bluetooth.active, isTrue);
+    expect(session.aware.active, isTrue);
+  });
+
   test('incoming watcher projects plain text and a typed location', () async {
     final gateway = FakeGateway();
     final sdk = FieldMeshClient(gateway: gateway);
