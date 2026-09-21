@@ -64,6 +64,15 @@ class GroupInfo {
   int epoch;
 }
 
+/// A Field-author proof for a canonical cloud-relay envelope. The epoch and
+/// signature are public verification data; keys, roster and group secrets stay
+/// native.
+class CloudRelayProof {
+  CloudRelayProof({required this.epoch, required this.signature});
+  int epoch;
+  Uint8List signature;
+}
+
 /// Product-owned admission boundary for automatic enrollment. Member IDs are
 /// public 32-byte fingerprints encoded as lowercase hex. The native host still
 /// verifies the request signature before comparing it with this roster.
@@ -213,13 +222,18 @@ abstract class MeshHostApi {
   /// group policy. It never exposes authority keys or membership material.
   @async
   bool canIssueEnrollment();
+  @async
+  CloudRelayProof signCloudRelay(Uint8List canonical);
+
   /// The current authority signs a short-lived public handoff to an existing
   /// certified member. The host does not reveal its private authority key.
   @async
   Uint8List prepareAuthorityHandoff(Uint8List successor, int validUntil);
+
   /// The promoted member creates the next policy on its own protected store.
   @async
   Uint8List rotateAuthority(Uint8List handoff);
+
   /// Existing members accept an authority replacement only with the matching
   /// old-authority handoff.
   @async

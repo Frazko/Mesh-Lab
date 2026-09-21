@@ -420,6 +420,24 @@ final class NativeRuntime {
     guard status == 0 else { throw NativeFailure.status(status) }
     return canIssue == 1
   }
+  func signCloudRelay(_ canonical: [UInt8], material: GroupMaterial) throws -> [UInt8] {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard storeHandle != 0, !canonical.isEmpty, canonical.count <= 64 * 1024 else { throw NativeFailure.status(3) }
+    var material = material
+    defer { material.wipe() }
+    let proof = try sessionOutput { output in
+      material.identitySeed.withUnsafeBytes { identity in
+        canonical.withUnsafeBufferPointer { canonical in
+          mesh_secure_store_sign_cloud_relay(storeHandle,
+            identity.bindMemory(to: UInt8.self).baseAddress, identity.count,
+            canonical.baseAddress, canonical.count,
+            UInt64(Date().timeIntervalSince1970), output)
+        }
+      }
+    }
+    guard proof.count == 72 else { throw NativeFailure.status(1) }
+    return proof
+  }
   /// Signs a public, short-lived authority handoff. The successor has to be an
   /// already certified local group member; private material remains in Keychain.
   func prepareAuthorityHandoff(_ material: GroupMaterial, successor: [UInt8], validUntil: UInt64) throws -> [UInt8] {

@@ -12,4 +12,5 @@ mesh-ffi-c = { path = "../mesh-ffi-c" }
 mesh-protocol = { path = "../mesh-protocol" }
 jni = "=0.21.1"
 mesh-types = { path = "../mesh-types" }
+mesh-crypto = { path = "../mesh-crypto" }
 zeroize = "=1.8.2"

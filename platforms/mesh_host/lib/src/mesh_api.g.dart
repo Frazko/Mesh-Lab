@@ -10,9 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:meta/meta.dart' show immutable, protected, visibleForTesting;
 
 Object? _extractReplyValueOrThrow(
-    List<Object?>? replyList,
-    String channelName, {
-    required bool isNullValid,
+  List<Object?>? replyList,
+  String channelName, {
+  required bool isNullValid,
 }) {
   if (replyList == null) {
     throw PlatformException(
@@ -46,8 +46,9 @@ bool _deepEquals(Object? a, Object? b) {
   }
   if (a is List && b is List) {
     return a.length == b.length &&
-        a.indexed
-            .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
+        a.indexed.every(
+          ((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]),
+        );
   }
   if (a is Map && b is Map) {
     if (a.length != b.length) {
@@ -96,7 +97,6 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
-
 class EngineInfo {
   EngineInfo({
     required this.engineVersion,
@@ -117,17 +117,12 @@ class EngineInfo {
   String buildId;
 
   List<Object?> _toList() {
-    return <Object?>[
-      engineVersion,
-      abiVersion,
-      apiVersion,
-      phase,
-      buildId,
-    ];
+    return <Object?>[engineVersion, abiVersion, apiVersion, phase, buildId];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static EngineInfo decode(Object result) {
     result as List<Object?>;
@@ -149,7 +144,11 @@ class EngineInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(engineVersion, other.engineVersion) && _deepEquals(abiVersion, other.abiVersion) && _deepEquals(apiVersion, other.apiVersion) && _deepEquals(phase, other.phase) && _deepEquals(buildId, other.buildId);
+    return _deepEquals(engineVersion, other.engineVersion) &&
+        _deepEquals(abiVersion, other.abiVersion) &&
+        _deepEquals(apiVersion, other.apiVersion) &&
+        _deepEquals(phase, other.phase) &&
+        _deepEquals(buildId, other.buildId);
   }
 
   @override
@@ -176,15 +175,12 @@ class DiagnosticEvent {
   int kind;
 
   List<Object?> _toList() {
-    return <Object?>[
-      sequence,
-      requestId,
-      kind,
-    ];
+    return <Object?>[sequence, requestId, kind];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static DiagnosticEvent decode(Object result) {
     result as List<Object?>;
@@ -204,7 +200,9 @@ class DiagnosticEvent {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(sequence, other.sequence) && _deepEquals(requestId, other.requestId) && _deepEquals(kind, other.kind);
+    return _deepEquals(sequence, other.sequence) &&
+        _deepEquals(requestId, other.requestId) &&
+        _deepEquals(kind, other.kind);
   }
 
   @override
@@ -251,7 +249,8 @@ class EngineSnapshot {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static EngineSnapshot decode(Object result) {
     result as List<Object?>;
@@ -274,7 +273,12 @@ class EngineSnapshot {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(runtimeId, other.runtimeId) && _deepEquals(cursor, other.cursor) && _deepEquals(probeCount, other.probeCount) && _deepEquals(foundationState, other.foundationState) && _deepEquals(cursorReset, other.cursorReset) && _deepEquals(events, other.events);
+    return _deepEquals(runtimeId, other.runtimeId) &&
+        _deepEquals(cursor, other.cursor) &&
+        _deepEquals(probeCount, other.probeCount) &&
+        _deepEquals(foundationState, other.foundationState) &&
+        _deepEquals(cursorReset, other.cursorReset) &&
+        _deepEquals(events, other.events);
   }
 
   @override
@@ -288,24 +292,19 @@ class EngineSnapshot {
 }
 
 class IdentityInfo {
-  IdentityInfo({
-    required this.fingerprint,
-    required this.storage,
-  });
+  IdentityInfo({required this.fingerprint, required this.storage});
 
   String fingerprint;
 
   String storage;
 
   List<Object?> _toList() {
-    return <Object?>[
-      fingerprint,
-      storage,
-    ];
+    return <Object?>[fingerprint, storage];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static IdentityInfo decode(Object result) {
     result as List<Object?>;
@@ -324,7 +323,8 @@ class IdentityInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(fingerprint, other.fingerprint) && _deepEquals(storage, other.storage);
+    return _deepEquals(fingerprint, other.fingerprint) &&
+        _deepEquals(storage, other.storage);
   }
 
   @override
@@ -338,31 +338,23 @@ class IdentityInfo {
 }
 
 class GroupInfo {
-  GroupInfo({
-    required this.configured,
-    required this.epoch,
-  });
+  GroupInfo({required this.configured, required this.epoch});
 
   bool configured;
 
   int epoch;
 
   List<Object?> _toList() {
-    return <Object?>[
-      configured,
-      epoch,
-    ];
+    return <Object?>[configured, epoch];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static GroupInfo decode(Object result) {
     result as List<Object?>;
-    return GroupInfo(
-      configured: result[0]! as bool,
-      epoch: result[1]! as int,
-    );
+    return GroupInfo(configured: result[0]! as bool, epoch: result[1]! as int);
   }
 
   @override
@@ -374,7 +366,8 @@ class GroupInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(configured, other.configured) && _deepEquals(epoch, other.epoch);
+    return _deepEquals(configured, other.configured) &&
+        _deepEquals(epoch, other.epoch);
   }
 
   @override
@@ -384,6 +377,55 @@ class GroupInfo {
   @override
   String toString() {
     return 'GroupInfo(configured: $configured, epoch: $epoch)';
+  }
+}
+
+/// A Field-author proof for a canonical cloud-relay envelope. The epoch and
+/// signature are public verification data; keys, roster and group secrets stay
+/// native.
+class CloudRelayProof {
+  CloudRelayProof({required this.epoch, required this.signature});
+
+  int epoch;
+
+  Uint8List signature;
+
+  List<Object?> _toList() {
+    return <Object?>[epoch, signature];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static CloudRelayProof decode(Object result) {
+    result as List<Object?>;
+    return CloudRelayProof(
+      epoch: result[0]! as int,
+      signature: result[1]! as Uint8List,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! CloudRelayProof || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(epoch, other.epoch) &&
+        _deepEquals(signature, other.signature);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'CloudRelayProof(epoch: $epoch, signature: $signature)';
   }
 }
 
@@ -407,15 +449,12 @@ class EnrollmentAccessPolicy {
   bool authorityEnabled;
 
   List<Object?> _toList() {
-    return <Object?>[
-      scopeId,
-      authorizedMemberIds,
-      authorityEnabled,
-    ];
+    return <Object?>[scopeId, authorizedMemberIds, authorityEnabled];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static EnrollmentAccessPolicy decode(Object result) {
     result as List<Object?>;
@@ -435,7 +474,9 @@ class EnrollmentAccessPolicy {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(scopeId, other.scopeId) && _deepEquals(authorizedMemberIds, other.authorizedMemberIds) && _deepEquals(authorityEnabled, other.authorityEnabled);
+    return _deepEquals(scopeId, other.scopeId) &&
+        _deepEquals(authorizedMemberIds, other.authorizedMemberIds) &&
+        _deepEquals(authorityEnabled, other.authorityEnabled);
   }
 
   @override
@@ -498,7 +539,8 @@ class BluetoothInfo {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static BluetoothInfo decode(Object result) {
     result as List<Object?>;
@@ -525,7 +567,16 @@ class BluetoothInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(available, other.available) && _deepEquals(authorized, other.authorized) && _deepEquals(enabled, other.enabled) && _deepEquals(active, other.active) && _deepEquals(peerCount, other.peerCount) && _deepEquals(probeCount, other.probeCount) && _deepEquals(authenticated, other.authenticated) && _deepEquals(messageCount, other.messageCount) && _deepEquals(lastMessage, other.lastMessage) && _deepEquals(detail, other.detail);
+    return _deepEquals(available, other.available) &&
+        _deepEquals(authorized, other.authorized) &&
+        _deepEquals(enabled, other.enabled) &&
+        _deepEquals(active, other.active) &&
+        _deepEquals(peerCount, other.peerCount) &&
+        _deepEquals(probeCount, other.probeCount) &&
+        _deepEquals(authenticated, other.authenticated) &&
+        _deepEquals(messageCount, other.messageCount) &&
+        _deepEquals(lastMessage, other.lastMessage) &&
+        _deepEquals(detail, other.detail);
   }
 
   @override
@@ -558,16 +609,12 @@ class VerifiedIncomingText {
   String body;
 
   List<Object?> _toList() {
-    return <Object?>[
-      authorId,
-      objectId,
-      verifiedAtUnixSeconds,
-      body,
-    ];
+    return <Object?>[authorId, objectId, verifiedAtUnixSeconds, body];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static VerifiedIncomingText decode(Object result) {
     result as List<Object?>;
@@ -588,7 +635,10 @@ class VerifiedIncomingText {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(authorId, other.authorId) && _deepEquals(objectId, other.objectId) && _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && _deepEquals(body, other.body);
+    return _deepEquals(authorId, other.authorId) &&
+        _deepEquals(objectId, other.objectId) &&
+        _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) &&
+        _deepEquals(body, other.body);
   }
 
   @override
@@ -638,7 +688,8 @@ class VerifiedIncomingVoice {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static VerifiedIncomingVoice decode(Object result) {
     result as List<Object?>;
@@ -661,7 +712,12 @@ class VerifiedIncomingVoice {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(authorId, other.authorId) && _deepEquals(objectId, other.objectId) && _deepEquals(logicalId, other.logicalId) && _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) && _deepEquals(durationMillis, other.durationMillis) && _deepEquals(context, other.context);
+    return _deepEquals(authorId, other.authorId) &&
+        _deepEquals(objectId, other.objectId) &&
+        _deepEquals(logicalId, other.logicalId) &&
+        _deepEquals(verifiedAtUnixSeconds, other.verifiedAtUnixSeconds) &&
+        _deepEquals(durationMillis, other.durationMillis) &&
+        _deepEquals(context, other.context);
   }
 
   @override
@@ -691,16 +747,12 @@ class VoiceInfo {
   String detail;
 
   List<Object?> _toList() {
-    return <Object?>[
-      receivedCount,
-      lastDurationMillis,
-      ready,
-      detail,
-    ];
+    return <Object?>[receivedCount, lastDurationMillis, ready, detail];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static VoiceInfo decode(Object result) {
     result as List<Object?>;
@@ -721,7 +773,10 @@ class VoiceInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(receivedCount, other.receivedCount) && _deepEquals(lastDurationMillis, other.lastDurationMillis) && _deepEquals(ready, other.ready) && _deepEquals(detail, other.detail);
+    return _deepEquals(receivedCount, other.receivedCount) &&
+        _deepEquals(lastDurationMillis, other.lastDurationMillis) &&
+        _deepEquals(ready, other.ready) &&
+        _deepEquals(detail, other.detail);
   }
 
   @override
@@ -753,16 +808,12 @@ class DeliveryInfo {
   String state;
 
   List<Object?> _toList() {
-    return <Object?>[
-      logicalId,
-      targetCount,
-      deliveredCount,
-      state,
-    ];
+    return <Object?>[logicalId, targetCount, deliveredCount, state];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static DeliveryInfo decode(Object result) {
     result as List<Object?>;
@@ -783,7 +834,10 @@ class DeliveryInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(logicalId, other.logicalId) && _deepEquals(targetCount, other.targetCount) && _deepEquals(deliveredCount, other.deliveredCount) && _deepEquals(state, other.state);
+    return _deepEquals(logicalId, other.logicalId) &&
+        _deepEquals(targetCount, other.targetCount) &&
+        _deepEquals(deliveredCount, other.deliveredCount) &&
+        _deepEquals(state, other.state);
   }
 
   @override
@@ -836,7 +890,8 @@ class AwareInfo {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static AwareInfo decode(Object result) {
     result as List<Object?>;
@@ -860,7 +915,13 @@ class AwareInfo {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(available, other.available) && _deepEquals(enabled, other.enabled) && _deepEquals(active, other.active) && _deepEquals(peerCount, other.peerCount) && _deepEquals(maxPeers, other.maxPeers) && _deepEquals(state, other.state) && _deepEquals(detail, other.detail);
+    return _deepEquals(available, other.available) &&
+        _deepEquals(enabled, other.enabled) &&
+        _deepEquals(active, other.active) &&
+        _deepEquals(peerCount, other.peerCount) &&
+        _deepEquals(maxPeers, other.maxPeers) &&
+        _deepEquals(state, other.state) &&
+        _deepEquals(detail, other.detail);
   }
 
   @override
@@ -873,7 +934,6 @@ class AwareInfo {
   }
 }
 
-
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -881,41 +941,44 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    }    else if (value is EngineInfo) {
+    } else if (value is EngineInfo) {
       buffer.putUint8(129);
       writeValue(buffer, value.encode());
-    }    else if (value is DiagnosticEvent) {
+    } else if (value is DiagnosticEvent) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    }    else if (value is EngineSnapshot) {
+    } else if (value is EngineSnapshot) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    }    else if (value is IdentityInfo) {
+    } else if (value is IdentityInfo) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is GroupInfo) {
+    } else if (value is GroupInfo) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is EnrollmentAccessPolicy) {
+    } else if (value is CloudRelayProof) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is BluetoothInfo) {
+    } else if (value is EnrollmentAccessPolicy) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is VerifiedIncomingText) {
+    } else if (value is BluetoothInfo) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is VerifiedIncomingVoice) {
+    } else if (value is VerifiedIncomingText) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is VoiceInfo) {
+    } else if (value is VerifiedIncomingVoice) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is DeliveryInfo) {
+    } else if (value is VoiceInfo) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is AwareInfo) {
+    } else if (value is DeliveryInfo) {
       buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    } else if (value is AwareInfo) {
+      buffer.putUint8(141);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -936,18 +999,20 @@ class _PigeonCodec extends StandardMessageCodec {
       case 133:
         return GroupInfo.decode(readValue(buffer)!);
       case 134:
-        return EnrollmentAccessPolicy.decode(readValue(buffer)!);
+        return CloudRelayProof.decode(readValue(buffer)!);
       case 135:
-        return BluetoothInfo.decode(readValue(buffer)!);
+        return EnrollmentAccessPolicy.decode(readValue(buffer)!);
       case 136:
-        return VerifiedIncomingText.decode(readValue(buffer)!);
+        return BluetoothInfo.decode(readValue(buffer)!);
       case 137:
-        return VerifiedIncomingVoice.decode(readValue(buffer)!);
+        return VerifiedIncomingText.decode(readValue(buffer)!);
       case 138:
-        return VoiceInfo.decode(readValue(buffer)!);
+        return VerifiedIncomingVoice.decode(readValue(buffer)!);
       case 139:
-        return DeliveryInfo.decode(readValue(buffer)!);
+        return VoiceInfo.decode(readValue(buffer)!);
       case 140:
+        return DeliveryInfo.decode(readValue(buffer)!);
+      case 141:
         return AwareInfo.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -959,9 +1024,13 @@ class MeshHostApi {
   /// Constructor for [MeshHostApi]. The [binaryMessenger] named argument is
   /// available for dependency injection. If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  MeshHostApi({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
-      : pigeonVar_binaryMessenger = binaryMessenger,
-        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+  MeshHostApi({
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) : pigeonVar_binaryMessenger = binaryMessenger,
+       pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty
+           ? '.$messageChannelSuffix'
+           : '';
   final BinaryMessenger? pigeonVar_binaryMessenger;
 
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
@@ -969,7 +1038,8 @@ class MeshHostApi {
   final String pigeonVar_messageChannelSuffix;
 
   Future<EngineInfo> engineInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.engineInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.engineInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -979,16 +1049,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as EngineInfo;
   }
 
   Future<IdentityInfo> prepareIdentity() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareIdentity$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareIdentity$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -998,16 +1068,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as IdentityInfo;
   }
 
   Future<GroupInfo> groupInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.groupInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.groupInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1017,16 +1087,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as GroupInfo;
   }
 
   Future<GroupInfo> createGroup() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.createGroup$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.createGroup$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1036,16 +1106,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as GroupInfo;
   }
 
   Future<Uint8List> exportInvitation() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.exportInvitation$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.exportInvitation$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1055,56 +1125,60 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   Future<Uint8List> createEnrollmentRequest(Uint8List invitation) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.createEnrollmentRequest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.createEnrollmentRequest$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[invitation]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[invitation],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   Future<Uint8List> issueEnrollment(Uint8List request) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.issueEnrollment$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.issueEnrollment$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   /// Reports whether this identity is the authority certified in the current
   /// group policy. It never exposes authority keys or membership material.
   Future<bool> canIssueEnrollment() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.canIssueEnrollment$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.canIssueEnrollment$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1114,115 +1188,152 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
-  /// The current authority signs a short-lived public handoff to an existing
-  /// certified member. The host does not reveal its private authority key.
-  Future<Uint8List> prepareAuthorityHandoff(Uint8List successor, int validUntil) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareAuthorityHandoff$pigeonVar_messageChannelSuffix';
+  Future<CloudRelayProof> signCloudRelay(Uint8List canonical) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.signCloudRelay$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[successor, validUntil]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[canonical],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as CloudRelayProof;
+  }
+
+  /// The current authority signs a short-lived public handoff to an existing
+  /// certified member. The host does not reveal its private authority key.
+  Future<Uint8List> prepareAuthorityHandoff(
+    Uint8List successor,
+    int validUntil,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareAuthorityHandoff$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[successor, validUntil],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   /// The promoted member creates the next policy on its own protected store.
   Future<Uint8List> rotateAuthority(Uint8List handoff) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.rotateAuthority$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.rotateAuthority$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[handoff]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[handoff],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   /// Existing members accept an authority replacement only with the matching
   /// old-authority handoff.
-  Future<GroupInfo> installRotatedPolicy(Uint8List policy, Uint8List handoff) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.installRotatedPolicy$pigeonVar_messageChannelSuffix';
+  Future<GroupInfo> installRotatedPolicy(
+    Uint8List policy,
+    Uint8List handoff,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.installRotatedPolicy$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[policy, handoff]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[policy, handoff],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as GroupInfo;
   }
 
   Future<GroupInfo> installPolicy(Uint8List policy) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.installPolicy$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.installPolicy$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[policy]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[policy],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as GroupInfo;
   }
 
   Future<void> configureEnrollmentAccess(EnrollmentAccessPolicy policy) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.configureEnrollmentAccess$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.configureEnrollmentAccess$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[policy]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[policy],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> clearEnrollmentAccess() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.clearEnrollmentAccess$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.clearEnrollmentAccess$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1232,15 +1343,15 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<BluetoothInfo> bluetoothInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.bluetoothInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.bluetoothInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1250,16 +1361,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as BluetoothInfo;
   }
 
   Future<BluetoothInfo> prepareBluetooth() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareBluetooth$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareBluetooth$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1269,16 +1380,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as BluetoothInfo;
   }
 
   Future<BluetoothInfo> startBluetoothDiscovery() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.startBluetoothDiscovery$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.startBluetoothDiscovery$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1288,16 +1399,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as BluetoothInfo;
   }
 
   Future<BluetoothInfo> stopBluetoothDiscovery() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.stopBluetoothDiscovery$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.stopBluetoothDiscovery$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1307,16 +1418,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as BluetoothInfo;
   }
 
   Future<AwareInfo> awareInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.awareInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.awareInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1326,16 +1437,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as AwareInfo;
   }
 
   Future<AwareInfo> startAwareDiscovery() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.startAwareDiscovery$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.startAwareDiscovery$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1345,16 +1456,16 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as AwareInfo;
   }
 
   Future<AwareInfo> stopAwareDiscovery() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.stopAwareDiscovery$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.stopAwareDiscovery$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1364,54 +1475,58 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as AwareInfo;
   }
 
   Future<bool> sendText(String message, String logicalId) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.sendText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.sendText$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[message, logicalId]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[message, logicalId],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<DeliveryInfo> deliveryInfo(String logicalId) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.deliveryInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.deliveryInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[logicalId]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[logicalId],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as DeliveryInfo;
   }
 
   Future<List<VerifiedIncomingText>> drainVerifiedIncomingText() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingText$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1421,16 +1536,17 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as List<Object?>).cast<VerifiedIncomingText>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>)
+        .cast<VerifiedIncomingText>();
   }
 
   Future<List<VerifiedIncomingVoice>> drainVerifiedIncomingVoice() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingVoice$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.drainVerifiedIncomingVoice$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1440,16 +1556,17 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as List<Object?>).cast<VerifiedIncomingVoice>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>)
+        .cast<VerifiedIncomingVoice>();
   }
 
   Future<VoiceInfo> voiceInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.voiceInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.voiceInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1459,54 +1576,67 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as VoiceInfo;
   }
 
-  Future<bool> sendVoice(Uint8List audio, int durationMillis, String logicalId) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.sendVoice$pigeonVar_messageChannelSuffix';
+  Future<bool> sendVoice(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.sendVoice$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[audio, durationMillis, logicalId]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[audio, durationMillis, logicalId],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
-  Future<bool> sendVoiceWithContext(Uint8List audio, int durationMillis, String logicalId, String context) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.sendVoiceWithContext$pigeonVar_messageChannelSuffix';
+  Future<bool> sendVoiceWithContext(
+    Uint8List audio,
+    int durationMillis,
+    String logicalId,
+    String context,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.sendVoiceWithContext$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[audio, durationMillis, logicalId, context]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[audio, durationMillis, logicalId, context],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<bool> playLastVoice() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.playLastVoice$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.playLastVoice$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1516,68 +1646,73 @@ class MeshHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<bool> playVoice(String objectId) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.playVoice$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.playVoice$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[objectId]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[objectId],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<EngineSnapshot> subscribe(int cursor) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.subscribe$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.subscribe$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[cursor]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[cursor],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as EngineSnapshot;
   }
 
   Future<EngineSnapshot> verifyBridge(int requestId) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.verifyBridge$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.mesh_host.MeshHostApi.verifyBridge$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[requestId]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[requestId],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as EngineSnapshot;
   }
 }

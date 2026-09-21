@@ -1872,6 +1872,53 @@ pub fn secure_store_can_issue_enrollment(
     })
 }
 
+/// Produces an author proof for a bounded, canonical product relay envelope.
+///
+/// The active encrypted store supplies the Field group and epoch; Flutter
+/// receives only `epoch || signature`. The protected identity seed is copied
+/// only for this call. A phone cannot sign after its local policy has expired
+/// or if its public identity is no longer certified by that policy.
+pub fn secure_store_sign_cloud_relay(
+    handle: u64,
+    identity_seed: &[u8],
+    canonical: &[u8],
+    now: u64,
+) -> Result<Vec<u8>, Error> {
+    guarded(|| {
+        if identity_seed.len() != 32
+            || canonical.is_empty()
+            || canonical.len() > mesh_crypto::MAX_SIGNED_BYTES
+            || now == 0
+        {
+            return Err(Error::InvalidArgument);
+        }
+        let mut seed = zeroize::Zeroizing::new([0; 32]);
+        seed.copy_from_slice(identity_seed);
+        let identity = IdentitySigningKey::import(seed);
+        let registry = stores().lock().map_err(|_| Error::InternalInvariant)?;
+        let store = registry.stores.get(&handle).ok_or(Error::InvalidHandle)?;
+        let active = store
+            .active_policy(now)
+            .map_err(|_| Error::InternalInvariant)?
+            .ok_or(Error::StaleRequest)?;
+        let bundle = store
+            .policy_bundle()
+            .map_err(|_| Error::InternalInvariant)?
+            .ok_or(Error::StaleRequest)?;
+        let roster = bundle.verify(now).map_err(|_| Error::StaleRequest)?;
+        if !roster.contains_member(MemberId(identity.public_key())) {
+            return Err(Error::StaleRequest);
+        }
+        let signature = identity
+            .sign(active.scope, mesh_crypto::Domain::CloudRelay, canonical)
+            .map_err(|_| Error::InvalidArgument)?;
+        let mut output = Vec::with_capacity(72);
+        output.extend(active.scope.epoch.to_be_bytes());
+        output.extend(signature);
+        Ok(output)
+    })
+}
+
 /// Reads only the applicant's certified public member identity from a bounded
 /// enrollment request. Hosts use this before issuing a policy so a product can
 /// compare the request against its server-authorized roster. No private key,
@@ -3188,6 +3235,43 @@ pub unsafe extern "C" fn mesh_secure_store_can_issue_enrollment(
     )
 }
 /// # Safety
+/// The identity seed is copied into a zeroizing buffer. `canonical` is a
+/// bounded product envelope and `out` receives `epoch || signature` (72 bytes)
+/// only; no private key, roster, or group secret leaves the host.
+#[no_mangle]
+pub unsafe extern "C" fn mesh_secure_store_sign_cloud_relay(
+    handle: u64,
+    identity_seed: *const u8,
+    identity_seed_len: usize,
+    canonical: *const u8,
+    canonical_len: usize,
+    now: u64,
+    out: *mut MeshBuffer,
+) -> i32 {
+    if out.is_null() || !(out as usize).is_multiple_of(std::mem::align_of::<MeshBuffer>()) {
+        return Error::InvalidArgument as i32;
+    }
+    unsafe { *out = MeshBuffer::default() };
+    if identity_seed.is_null()
+        || canonical.is_null()
+        || identity_seed_len != 32
+        || canonical_len == 0
+        || canonical_len > mesh_crypto::MAX_SIGNED_BYTES
+        || now == 0
+    {
+        return Error::InvalidArgument as i32;
+    }
+    let result = guarded(|| {
+        let seed = unsafe { std::slice::from_raw_parts(identity_seed, identity_seed_len) };
+        let canonical = unsafe { std::slice::from_raw_parts(canonical, canonical_len) };
+        let bytes = secure_store_sign_cloud_relay(handle, seed, canonical, now)?.into_boxed_slice();
+        let len = bytes.len();
+        let ptr = Box::into_raw(bytes) as *mut u8;
+        Ok(MeshBuffer { ptr, len })
+    });
+    status(result, |buffer| unsafe { *out = buffer })
+}
+/// # Safety
 /// The request references bounded public bytes. `out` points to 32 writable
 /// bytes and receives a verified public member identity only.
 #[no_mangle]
@@ -3659,6 +3743,81 @@ mod tests {
             );
         }
         assert_eq!(capability, 0);
+        assert_eq!(secure_store_release(handle), Ok(()));
+        let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn cloud_relay_proof_binds_the_certified_author_scope_epoch_and_payload() {
+        let path = std::env::temp_dir().join(format!(
+            "mesh-ffi-cloud-relay-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let seed = [24; 32];
+        let member: [u8; 32] = identity_public(&seed).unwrap().try_into().unwrap();
+        let handle = secure_store_open(&[25; 32], &member, path.to_str().unwrap()).unwrap();
+        assert_eq!(
+            secure_store_sign_cloud_relay(handle, &seed, b"canonical action", 100),
+            Err(Error::StaleRequest)
+        );
+        assert_eq!(
+            secure_store_create_group(handle, &seed, &[26; 32], &member, 100),
+            Ok(1)
+        );
+        let proof = secure_store_sign_cloud_relay(handle, &seed, b"canonical action", 101).unwrap();
+        assert_eq!(proof.len(), 72);
+        assert_eq!(u64::from_be_bytes(proof[..8].try_into().unwrap()), 1);
+        let scope = stores()
+            .lock()
+            .unwrap()
+            .stores
+            .get(&handle)
+            .unwrap()
+            .active_policy(101)
+            .unwrap()
+            .unwrap()
+            .scope;
+        let signature: [u8; 64] = proof[8..].try_into().unwrap();
+        mesh_crypto::verify(
+            member,
+            scope,
+            mesh_crypto::Domain::CloudRelay,
+            b"canonical action",
+            signature,
+        )
+        .unwrap();
+        assert!(mesh_crypto::verify(
+            member,
+            scope,
+            mesh_crypto::Domain::CloudRelay,
+            b"changed action",
+            signature
+        )
+        .is_err());
+        assert_eq!(
+            secure_store_sign_cloud_relay(handle, &[27; 32], b"canonical action", 101),
+            Err(Error::StaleRequest)
+        );
+        let mut output = MeshBuffer {
+            ptr: std::ptr::null_mut(),
+            len: 9,
+        };
+        unsafe {
+            assert_eq!(
+                mesh_secure_store_sign_cloud_relay(
+                    handle,
+                    seed.as_ptr(),
+                    32,
+                    std::ptr::null(),
+                    1,
+                    101,
+                    &mut output,
+                ),
+                Error::InvalidArgument as i32
+            );
+        }
+        assert!(output.ptr.is_null());
+        assert_eq!(output.len, 0);
         assert_eq!(secure_store_release(handle), Ok(()));
         let _ = std::fs::remove_file(path);
     }

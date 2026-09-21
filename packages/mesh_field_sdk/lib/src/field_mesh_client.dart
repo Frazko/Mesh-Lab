@@ -102,13 +102,18 @@ abstract interface class FieldMeshAuthorityHandoffGateway {
   Future<FieldGroup> installRotatedPolicy(Uint8List policy, Uint8List handoff);
 }
 
+abstract interface class FieldMeshCloudRelayGateway {
+  Future<FieldCloudRelayProof> signCloudRelay(Uint8List canonical);
+}
+
 /// Default gateway for iOS and Android. It maps mutable Pigeon DTOs into
 /// immutable product DTOs at the package boundary.
 final class MeshHostGateway
     implements
         FieldMeshGateway,
         FieldMeshEnrollmentAccessGateway,
-        FieldMeshAuthorityHandoffGateway {
+        FieldMeshAuthorityHandoffGateway,
+        FieldMeshCloudRelayGateway {
   MeshHostGateway({MeshHostApi? api}) : _api = api ?? MeshHostApi();
 
   final MeshHostApi _api;
@@ -184,6 +189,21 @@ final class MeshHostGateway
     Uint8List policy,
     Uint8List handoff,
   ) async => _group(await _api.installRotatedPolicy(policy, handoff));
+  @override
+  Future<FieldCloudRelayProof> signCloudRelay(Uint8List canonical) async {
+    if (canonical.isEmpty || canonical.length > 64 * 1024) {
+      throw ArgumentError.value(canonical, 'canonical', 'must be bounded');
+    }
+    final proof = await _api.signCloudRelay(canonical);
+    if (proof.epoch <= 0 || proof.signature.length != 64) {
+      throw StateError('Native cloud-relay proof is invalid');
+    }
+    return FieldCloudRelayProof(
+      epoch: proof.epoch,
+      signature: Uint8List.fromList(proof.signature),
+    );
+  }
+
   @override
   Future<FieldBluetoothStatus> bluetoothStatus() async =>
       _bluetooth(await _api.bluetoothInfo());
@@ -285,6 +305,7 @@ final class FieldMeshClient
         FieldMeshVoiceContextSender,
         FieldMeshEnrollmentAccessController,
         FieldMeshAuthorityHandoffController,
+        FieldMeshCloudRelaySigner,
         FieldMeshVerifiedIncomingSource,
         FieldMeshVerifiedIncomingVoiceSource {
   FieldMeshClient({FieldMeshGateway? gateway})
@@ -344,6 +365,24 @@ final class FieldMeshClient
       throw UnsupportedError('El host no admite comprobar la autoridad.');
     }
     return gateway.canIssueEnrollment();
+  }
+
+  @override
+  Future<FieldCloudRelayProof> signCloudRelay(Uint8List canonical) async {
+    final gateway = _gateway is FieldMeshCloudRelayGateway
+        ? _gateway as FieldMeshCloudRelayGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError('El host no admite firmas de relevo a nube.');
+    }
+    if (canonical.isEmpty || canonical.length > 64 * 1024) {
+      throw ArgumentError.value(canonical, 'canonical', 'must be bounded');
+    }
+    final proof = await gateway.signCloudRelay(canonical);
+    if (proof.epoch <= 0 || proof.signature.length != 64) {
+      throw StateError('La prueba de relevo nativa no es válida.');
+    }
+    return proof;
   }
 
   @override

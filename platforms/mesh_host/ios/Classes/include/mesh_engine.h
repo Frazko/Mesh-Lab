@@ -92,6 +92,10 @@ int32_t mesh_enrollment_request_member(const uint8_t *request, size_t request_le
                                        uint64_t now, uint8_t *out);
 int32_t mesh_secure_store_install_policy(uint64_t handle, const uint8_t *bundle,
                                          size_t bundle_len, uint64_t now, uint64_t *out);
+/* Returns epoch || a Field-author signature over one canonical cloud-relay envelope. */
+int32_t mesh_secure_store_sign_cloud_relay(uint64_t handle, const uint8_t *identity_seed,
+                                           size_t identity_seed_len, const uint8_t *canonical,
+                                           size_t canonical_len, uint64_t now, MeshBuffer *out);
 /* New authority builds a next-epoch bundle; existing members install it only with handoff. */
 int32_t mesh_secure_store_rotate_authority(uint64_t handle, const uint8_t *successor_seed,
                                            size_t successor_seed_len, const uint8_t *handoff,

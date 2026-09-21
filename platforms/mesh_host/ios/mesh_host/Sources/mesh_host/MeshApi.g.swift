@@ -424,6 +424,50 @@ struct GroupInfo: Hashable, CustomStringConvertible {
   }
 }
 
+/// A Field-author proof for a canonical cloud-relay envelope. The epoch and
+/// signature are public verification data; keys, roster and group secrets stay
+/// native.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct CloudRelayProof: Hashable, CustomStringConvertible {
+  var epoch: Int64
+  var signature: FlutterStandardTypedData
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> CloudRelayProof? {
+    let epoch = pigeonVar_list[0] as! Int64
+    let signature = pigeonVar_list[1] as! FlutterStandardTypedData
+
+    return CloudRelayProof(
+      epoch: epoch,
+      signature: signature
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      epoch,
+      signature,
+    ]
+  }
+  static func == (lhs: CloudRelayProof, rhs: CloudRelayProof) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return MeshApiPigeonInternal.deepEquals(lhs.epoch, rhs.epoch) && MeshApiPigeonInternal.deepEquals(lhs.signature, rhs.signature)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("CloudRelayProof")
+    MeshApiPigeonInternal.deepHash(value: epoch, hasher: &hasher)
+    MeshApiPigeonInternal.deepHash(value: signature, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "CloudRelayProof(epoch: \(String(describing: epoch)), signature: \(String(describing: signature)))"
+  }
+}
+
 /// Product-owned admission boundary for automatic enrollment. Member IDs are
 /// public 32-byte fingerprints encoded as lowercase hex. The native host still
 /// verifies the request signature before comparing it with this roster.
@@ -859,18 +903,20 @@ private class MeshApiPigeonCodecReader: FlutterStandardReader {
     case 133:
       return GroupInfo.fromList(self.readValue() as! [Any?])
     case 134:
-      return EnrollmentAccessPolicy.fromList(self.readValue() as! [Any?])
+      return CloudRelayProof.fromList(self.readValue() as! [Any?])
     case 135:
-      return BluetoothInfo.fromList(self.readValue() as! [Any?])
+      return EnrollmentAccessPolicy.fromList(self.readValue() as! [Any?])
     case 136:
-      return VerifiedIncomingText.fromList(self.readValue() as! [Any?])
+      return BluetoothInfo.fromList(self.readValue() as! [Any?])
     case 137:
-      return VerifiedIncomingVoice.fromList(self.readValue() as! [Any?])
+      return VerifiedIncomingText.fromList(self.readValue() as! [Any?])
     case 138:
-      return VoiceInfo.fromList(self.readValue() as! [Any?])
+      return VerifiedIncomingVoice.fromList(self.readValue() as! [Any?])
     case 139:
-      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+      return VoiceInfo.fromList(self.readValue() as! [Any?])
     case 140:
+      return DeliveryInfo.fromList(self.readValue() as! [Any?])
+    case 141:
       return AwareInfo.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -895,26 +941,29 @@ private class MeshApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? GroupInfo {
       super.writeByte(133)
       super.writeValue(value.toList())
-    } else if let value = value as? EnrollmentAccessPolicy {
+    } else if let value = value as? CloudRelayProof {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? BluetoothInfo {
+    } else if let value = value as? EnrollmentAccessPolicy {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? VerifiedIncomingText {
+    } else if let value = value as? BluetoothInfo {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? VerifiedIncomingVoice {
+    } else if let value = value as? VerifiedIncomingText {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? VoiceInfo {
+    } else if let value = value as? VerifiedIncomingVoice {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? DeliveryInfo {
+    } else if let value = value as? VoiceInfo {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? AwareInfo {
+    } else if let value = value as? DeliveryInfo {
       super.writeByte(140)
+      super.writeValue(value.toList())
+    } else if let value = value as? AwareInfo {
+      super.writeByte(141)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -949,6 +998,7 @@ protocol MeshHostApi {
   /// Reports whether this identity is the authority certified in the current
   /// group policy. It never exposes authority keys or membership material.
   func canIssueEnrollment() async throws -> Bool
+  func signCloudRelay(canonical: FlutterStandardTypedData) async throws -> CloudRelayProof
   /// The current authority signs a short-lived public handoff to an existing
   /// certified member. The host does not reveal its private authority key.
   func prepareAuthorityHandoff(successor: FlutterStandardTypedData, validUntil: Int64) async throws -> FlutterStandardTypedData
@@ -1111,6 +1161,23 @@ class MeshHostApiSetup {
       }
     } else {
       canIssueEnrollmentChannel.setMessageHandler(nil)
+    }
+    let signCloudRelayChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.signCloudRelay\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      signCloudRelayChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let canonicalArg = args[0] as! FlutterStandardTypedData
+        Task { @MainActor in
+          do {
+            let result = try await api.signCloudRelay(canonical: canonicalArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      signCloudRelayChannel.setMessageHandler(nil)
     }
     /// The current authority signs a short-lived public handoff to an existing
     /// certified member. The host does not reveal its private authority key.

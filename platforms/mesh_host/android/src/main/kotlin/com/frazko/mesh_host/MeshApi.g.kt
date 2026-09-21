@@ -436,6 +436,53 @@ data class GroupInfo (
 }
 
 /**
+ * A Field-author proof for a canonical cloud-relay envelope. The epoch and
+ * signature are public verification data; keys, roster and group secrets stay
+ * native.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class CloudRelayProof (
+  val epoch: Long,
+  val signature: ByteArray
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): CloudRelayProof {
+      val epoch = pigeonVar_list[0] as Long
+      val signature = pigeonVar_list[1] as ByteArray
+      return CloudRelayProof(epoch, signature)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      epoch,
+      signature,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as CloudRelayProof
+    return MeshApiPigeonUtils.deepEquals(this.epoch, other.epoch) && MeshApiPigeonUtils.deepEquals(this.signature, other.signature)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.epoch)
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.signature)
+    return result
+  }
+  override fun toString(): String {
+    return "CloudRelayProof(epoch=$epoch, signature=${signature.contentToString()})"
+  }
+}
+
+/**
  * Product-owned admission boundary for automatic enrollment. Member IDs are
  * public 32-byte fingerprints encoded as lowercase hex. The native host still
  * verifies the request signature before comparing it with this roster.
@@ -880,35 +927,40 @@ private open class MeshApiPigeonCodec : StandardMessageCodec() {
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          EnrollmentAccessPolicy.fromList(it)
+          CloudRelayProof.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          BluetoothInfo.fromList(it)
+          EnrollmentAccessPolicy.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VerifiedIncomingText.fromList(it)
+          BluetoothInfo.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VerifiedIncomingVoice.fromList(it)
+          VerifiedIncomingText.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VoiceInfo.fromList(it)
+          VerifiedIncomingVoice.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          DeliveryInfo.fromList(it)
+          VoiceInfo.fromList(it)
         }
       }
       140.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          DeliveryInfo.fromList(it)
+        }
+      }
+      141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           AwareInfo.fromList(it)
         }
@@ -938,32 +990,36 @@ private open class MeshApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is EnrollmentAccessPolicy -> {
+      is CloudRelayProof -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is BluetoothInfo -> {
+      is EnrollmentAccessPolicy -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is VerifiedIncomingText -> {
+      is BluetoothInfo -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is VerifiedIncomingVoice -> {
+      is VerifiedIncomingText -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is VoiceInfo -> {
+      is VerifiedIncomingVoice -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is DeliveryInfo -> {
+      is VoiceInfo -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is AwareInfo -> {
+      is DeliveryInfo -> {
         stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is AwareInfo -> {
+        stream.write(141)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -986,6 +1042,7 @@ interface MeshHostApi {
    * group policy. It never exposes authority keys or membership material.
    */
   suspend fun canIssueEnrollment(): Boolean
+  suspend fun signCloudRelay(canonical: ByteArray): CloudRelayProof
   /**
    * The current authority signs a short-lived public handoff to an existing
    * certified member. The host does not reveal its private authority key.
@@ -1159,6 +1216,25 @@ interface MeshHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.canIssueEnrollment())
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.signCloudRelay$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val canonicalArg = args[0] as ByteArray
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.signCloudRelay(canonicalArg))
               } catch (exception: Throwable) {
                 MeshApiPigeonUtils.wrapError(exception)
               }

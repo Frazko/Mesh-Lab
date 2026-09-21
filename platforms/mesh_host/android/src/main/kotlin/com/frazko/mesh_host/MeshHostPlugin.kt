@@ -111,6 +111,14 @@ internal object NativeRuntime {
             )
         } finally { material.wipe() }
     }
+    fun signCloudRelay(material: SecureIdentity.GroupMaterial, canonical: ByteArray): ByteArray {
+        check(storeHandle != 0L && canonical.isNotEmpty() && canonical.size <= 64 * 1024) { "SECURE_STORE_UNAVAILABLE" }
+        return try {
+            NativeBridge.secureStoreSignCloudRelay(
+                storeHandle, material.identitySeed, canonical, System.currentTimeMillis() / 1000,
+            ).also { check(it.size == 72) { "MESH_1" } }
+        } finally { material.wipe() }
+    }
     /** Produces a public short-lived handoff only from the current authority. */
     fun prepareAuthorityHandoff(
         material: SecureIdentity.GroupMaterial,
@@ -364,6 +372,16 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
         try { NativeRuntime.canIssueEnrollment(identity.groupMaterial()) }
         catch (e: Exception) {
             throw FlutterError("GROUP_AUTHORITY_UNAVAILABLE", "No se pudo comprobar la autoridad del grupo.", null)
+        }
+    }
+    override suspend fun signCloudRelay(canonical: ByteArray): CloudRelayProof = withContext(NativeRuntime.dispatcher) {
+        try {
+            val proof = NativeRuntime.signCloudRelay(identity.groupMaterial(), canonical)
+            val epoch = java.nio.ByteBuffer.wrap(proof, 0, 8).long
+            check(epoch > 0) { "MESH_1" }
+            CloudRelayProof(epoch, proof.copyOfRange(8, 72))
+        } catch (e: Exception) {
+            throw FlutterError("CLOUD_RELAY_UNAVAILABLE", "No se pudo firmar la acción de Malla.", null)
         }
     }
     override suspend fun prepareAuthorityHandoff(successor: ByteArray, validUntil: Long): ByteArray = withContext(NativeRuntime.dispatcher) {

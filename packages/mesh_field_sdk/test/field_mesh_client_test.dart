@@ -10,7 +10,8 @@ class FakeGateway
     implements
         FieldMeshGateway,
         FieldMeshEnrollmentAccessGateway,
-        FieldMeshAuthorityHandoffGateway {
+        FieldMeshAuthorityHandoffGateway,
+        FieldMeshCloudRelayGateway {
   bool secure = false;
   bool awareSecure = false;
   bool active = false;
@@ -34,6 +35,11 @@ class FakeGateway
   Uint8List? installedPolicy;
   Uint8List? installedHandoff;
   Uint8List exportedPolicy = Uint8List.fromList(const [4, 5, 6]);
+  Uint8List? lastCloudRelayCanonical;
+  FieldCloudRelayProof cloudRelayProof = FieldCloudRelayProof(
+    epoch: 1,
+    signature: Uint8List.fromList(List<int>.filled(64, 7)),
+  );
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -86,6 +92,12 @@ class FakeGateway
 
   @override
   Future<bool> canIssueEnrollment() async => enrollmentAuthority;
+  @override
+  Future<FieldCloudRelayProof> signCloudRelay(Uint8List canonical) async {
+    lastCloudRelayCanonical = Uint8List.fromList(canonical);
+    return cloudRelayProof;
+  }
+
   @override
   Future<Uint8List> prepareAuthorityHandoff(
     Uint8List successor,
@@ -946,6 +958,24 @@ void main() {
     expect(session.bluetooth.active, isTrue);
     expect(session.aware.active, isTrue);
   });
+
+  test(
+    'cloud relay proof remains bounded and leaves signing material native',
+    () async {
+      final gateway = FakeGateway();
+      final sdk = FieldMeshClient(gateway: gateway);
+      final canonical = Uint8List.fromList(
+        utf8.encode('canonical relay action'),
+      );
+
+      final proof = await sdk.signCloudRelay(canonical);
+
+      expect(proof.epoch, 1);
+      expect(proof.signature, hasLength(64));
+      expect(gateway.lastCloudRelayCanonical, canonical);
+      await expectLater(sdk.signCloudRelay(Uint8List(0)), throwsArgumentError);
+    },
+  );
 
   test('incoming watcher projects plain text and a typed location', () async {
     final gateway = FakeGateway();

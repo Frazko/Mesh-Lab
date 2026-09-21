@@ -78,8 +78,10 @@ internal class SecureIdentity(context: Context) {
     fun prepare(): String {
         val material = loadMaterial()
         try {
-            return MessageDigest.getInstance("SHA-256").digest(publicKey(material))
-                .joinToString("") { "%02x".format(it.toInt() and 255) }
+            // This is the actual public Ed25519 member identity certified by
+            // Field policies. A one-way display hash cannot be matched by a
+            // receiving host or verified by a cloud relay.
+            return publicKey(material).joinToString("") { "%02x".format(it.toInt() and 255) }
         } finally { material.fill(0) }
     }
     fun storeMaterial(): StoreMaterial {

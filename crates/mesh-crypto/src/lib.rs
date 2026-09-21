@@ -67,6 +67,10 @@ pub enum Domain {
     /// receipt. Kept separate from `Receipt` so an acknowledgement cannot be
     /// replayed as delivery evidence.
     ReceiptAck = 9,
+    /// Authorizes a product cloud relay to persist a Field-authored action.
+    /// Kept separate from radio objects and receipts so a signature for a
+    /// server bridge cannot be replayed as any native protocol record.
+    CloudRelay = 10,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Scope {

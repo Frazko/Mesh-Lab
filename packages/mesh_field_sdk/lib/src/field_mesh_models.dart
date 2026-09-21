@@ -249,6 +249,24 @@ abstract interface class FieldMeshPresenceController {
   Future<FieldSessionStatus> maintainPresence();
 }
 
+/// Public proof that lets a product server verify an action received over the
+/// Field radios. It binds a canonical product envelope to the active Field
+/// group epoch, without exposing any identity seed or group secret.
+final class FieldCloudRelayProof {
+  const FieldCloudRelayProof({required this.epoch, required this.signature});
+
+  final int epoch;
+  final Uint8List signature;
+}
+
+/// Optional author-proof capability for a secure cloud relay. A nearby phone
+/// with Internet may submit this proof, but cannot alter or impersonate the
+/// original Field author. Products must still verify it at their server before
+/// persisting the supplied action.
+abstract interface class FieldMeshCloudRelaySigner {
+  Future<FieldCloudRelayProof> signCloudRelay(Uint8List canonical);
+}
+
 /// Product-owned admission scope for automatic group enrollment.
 ///
 /// Member IDs are public, lowercase 32-byte fingerprints. The separate scope

@@ -79,6 +79,14 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
       try NativeRuntime.shared.canIssueEnrollment(try SecureIdentity().groupMaterial())
     }
   }
+  func signCloudRelay(canonical: FlutterStandardTypedData) async throws -> CloudRelayProof {
+    try await execute {
+      let proof = try NativeRuntime.shared.signCloudRelay(Array(canonical.data), material: try SecureIdentity().groupMaterial())
+      let epoch = proof.prefix(8).reduce(Int64(0)) { ($0 << 8) | Int64($1) }
+      guard epoch > 0 else { throw NativeFailure.status(1) }
+      return CloudRelayProof(epoch: epoch, signature: FlutterStandardTypedData(bytes: Data(proof.dropFirst(8))))
+    }
+  }
   func prepareAuthorityHandoff(successor: FlutterStandardTypedData, validUntil: Int64) async throws -> FlutterStandardTypedData {
     try await execute {
       let now = Int64(Date().timeIntervalSince1970)

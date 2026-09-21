@@ -87,6 +87,7 @@ fn signature_domains_group_epoch_payload_and_key_are_bound() {
         Domain::Transition,
         Domain::Recovery,
         Domain::Presence,
+        Domain::CloudRelay,
     ] {
         let sig = a.sign(scope(), domain, b"canonical fixture").unwrap();
         verify(a.public_key(), scope(), domain, b"canonical fixture", sig).unwrap();
@@ -97,6 +98,7 @@ fn signature_domains_group_epoch_payload_and_key_are_bound() {
             Domain::Transition,
             Domain::Recovery,
             Domain::Presence,
+            Domain::CloudRelay,
         ] {
             if other != domain {
                 assert!(verify(a.public_key(), scope(), other, b"canonical fixture", sig).is_err())

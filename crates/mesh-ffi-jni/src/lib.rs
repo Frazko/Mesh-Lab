@@ -1132,6 +1132,46 @@ pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreCanIss
     }
 }
 #[no_mangle]
+pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreSignCloudRelay(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    identity_seed: JByteArray,
+    canonical: JByteArray,
+    now: jlong,
+) -> jbyteArray {
+    let result = mesh_ffi_c::guarded(|| {
+        if now <= 0
+            || env
+                .get_array_length(&identity_seed)
+                .map_err(|_| mesh_types_error())?
+                != 32
+        {
+            return Err(mesh_types_error());
+        }
+        let canonical_length = env
+            .get_array_length(&canonical)
+            .map_err(|_| mesh_types_error())?;
+        if !(1..=mesh_crypto::MAX_SIGNED_BYTES as i32).contains(&canonical_length) {
+            return Err(mesh_types_error());
+        }
+        let identity_seed = zeroize::Zeroizing::new(
+            env.convert_byte_array(&identity_seed)
+                .map_err(|_| mesh_types_error())?,
+        );
+        let canonical = env
+            .convert_byte_array(&canonical)
+            .map_err(|_| mesh_types_error())?;
+        mesh_ffi_c::secure_store_sign_cloud_relay(
+            handle as u64,
+            &identity_seed,
+            &canonical,
+            now as u64,
+        )
+    });
+    output_bytes(env, result)
+}
+#[no_mangle]
 pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_enrollmentRequestMember(
     mut env: JNIEnv,
     _class: JClass,

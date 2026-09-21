@@ -1,8 +1,31 @@
 # Avance del plan
 
-Estado vigente: 2026-09-20. **74% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-21. **78% global estimado · 90% Wi‑Fi Aware.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
+
+## Puente seguro Internet–Malla
+
+**Actualizado: 2026-09-21. Implementación local: 42%; gate físico: pendiente.**
+El núcleo añade un dominio de firma exclusivo para relevo a nube. Un host sólo
+puede producir una prueba si su política Field vigente lo certifica como
+miembro: devuelve la época y 64 bytes de firma sobre el sobre canónico, sin
+exponer la semilla de identidad, el secreto del grupo ni el roster. Las pruebas
+Rust verifican que la prueba falla sin política o con otra identidad y que no
+es válida si cambia el contenido; además queda separada de certificados,
+objetos, recibos y handoffs. Pigeon, JNI, Swift y la fachada
+`FieldMeshCloudRelaySigner` lo trasladan como capacidad opcional. La suite del
+SDK ahora tiene 33 pruebas y valida límites y ausencia de llaves en Flutter.
+
+La identidad que se entrega al producto ahora es la clave pública Ed25519
+codificada en hexadecimal, exactamente la identidad certificada por la radio.
+Antes se entregaba un hash de presentación: no era secreto pero tampoco podía
+ser comparado por el host ni verificado por un servidor. Al volver a entrar a
+un convoy con cobertura, Convoy sustituye idempotentemente el binding antiguo
+por esta clave pública real. Falta que el adaptador de Convoy adjunte el sobre
+a cada acción, una función de servidor verifique autor, binding, participación,
+época e idempotencia, y una cola durable permita a un vecino con Internet
+publicar la acción de un miembro sin cobertura.
 
 ## C3 — admisión automática gobernada por Convoy
 

@@ -79,7 +79,10 @@ final class SecureIdentity {
   func prepare() throws -> String {
     var material = try loadMaterial()
     defer { material.resetBytes(in: 0..<material.count) }
-    return SHA256.hash(data: Data(try publicKey(material))).map { String(format: "%02x", $0) }.joined()
+    // The binding must carry the same public Ed25519 member identity that a
+    // Field policy certifies. A display hash cannot be verified by peers or a
+    // cloud relay, and does not add secrecy because this value is public.
+    return try publicKey(material).map { String(format: "%02x", $0) }.joined()
   }
   func storeMaterial() throws -> SecureStoreMaterial {
     var material = try loadMaterial()
