@@ -213,6 +213,17 @@ abstract class MeshHostApi {
   /// group policy. It never exposes authority keys or membership material.
   @async
   bool canIssueEnrollment();
+  /// The current authority signs a short-lived public handoff to an existing
+  /// certified member. The host does not reveal its private authority key.
+  @async
+  Uint8List prepareAuthorityHandoff(Uint8List successor, int validUntil);
+  /// The promoted member creates the next policy on its own protected store.
+  @async
+  Uint8List rotateAuthority(Uint8List handoff);
+  /// Existing members accept an authority replacement only with the matching
+  /// old-authority handoff.
+  @async
+  GroupInfo installRotatedPolicy(Uint8List policy, Uint8List handoff);
   @async
   GroupInfo installPolicy(Uint8List policy);
   @async

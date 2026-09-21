@@ -366,6 +366,32 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
             throw FlutterError("GROUP_AUTHORITY_UNAVAILABLE", "No se pudo comprobar la autoridad del grupo.", null)
         }
     }
+    override suspend fun prepareAuthorityHandoff(successor: ByteArray, validUntil: Long): ByteArray = withContext(NativeRuntime.dispatcher) {
+        try {
+            check(successor.size == 32 && validUntil > System.currentTimeMillis() / 1000) { "GROUP_TRANSFER_FAILED" }
+            NativeRuntime.prepareAuthorityHandoff(identity.groupMaterial(), successor, validUntil)
+        } catch (e: Exception) {
+            throw FlutterError("GROUP_AUTHORITY_TRANSFER_FAILED", "No se pudo autorizar el relevo de la Malla.", null)
+        }
+    }
+    override suspend fun rotateAuthority(handoff: ByteArray): ByteArray = withContext(NativeRuntime.dispatcher) {
+        try {
+            val policy = NativeRuntime.rotateAuthority(identity.groupMaterial(), handoff)
+            aware.policyChanged()
+            policy
+        } catch (e: Exception) {
+            throw FlutterError("GROUP_AUTHORITY_TRANSFER_FAILED", "No se pudo rotar la autoridad de la Malla.", null)
+        }
+    }
+    override suspend fun installRotatedPolicy(policy: ByteArray, handoff: ByteArray): GroupInfo = withContext(NativeRuntime.dispatcher) {
+        try {
+            val epoch = NativeRuntime.installRotatedPolicy(policy, handoff)
+            aware.policyChanged()
+            GroupInfo(epoch > 0L, epoch)
+        } catch (e: Exception) {
+            throw FlutterError("GROUP_AUTHORITY_TRANSFER_FAILED", "No se pudo verificar el relevo de la Malla.", null)
+        }
+    }
     override suspend fun installPolicy(policy: ByteArray): GroupInfo = withContext(NativeRuntime.dispatcher) {
         try {
             val epoch = NativeRuntime.installPolicy(policy)

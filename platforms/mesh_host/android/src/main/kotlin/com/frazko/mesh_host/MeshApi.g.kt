@@ -986,6 +986,18 @@ interface MeshHostApi {
    * group policy. It never exposes authority keys or membership material.
    */
   suspend fun canIssueEnrollment(): Boolean
+  /**
+   * The current authority signs a short-lived public handoff to an existing
+   * certified member. The host does not reveal its private authority key.
+   */
+  suspend fun prepareAuthorityHandoff(successor: ByteArray, validUntil: Long): ByteArray
+  /** The promoted member creates the next policy on its own protected store. */
+  suspend fun rotateAuthority(handoff: ByteArray): ByteArray
+  /**
+   * Existing members accept an authority replacement only with the matching
+   * old-authority handoff.
+   */
+  suspend fun installRotatedPolicy(policy: ByteArray, handoff: ByteArray): GroupInfo
   suspend fun installPolicy(policy: ByteArray): GroupInfo
   suspend fun configureEnrollmentAccess(policy: EnrollmentAccessPolicy)
   suspend fun clearEnrollmentAccess()
@@ -1147,6 +1159,65 @@ interface MeshHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.canIssueEnrollment())
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.prepareAuthorityHandoff$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val successorArg = args[0] as ByteArray
+            val validUntilArg = args[1] as Long
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.prepareAuthorityHandoff(successorArg, validUntilArg))
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.rotateAuthority$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val handoffArg = args[0] as ByteArray
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.rotateAuthority(handoffArg))
+              } catch (exception: Throwable) {
+                MeshApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.mesh_host.MeshHostApi.installRotatedPolicy$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val policyArg = args[0] as ByteArray
+            val handoffArg = args[1] as ByteArray
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.installRotatedPolicy(policyArg, handoffArg))
               } catch (exception: Throwable) {
                 MeshApiPigeonUtils.wrapError(exception)
               }

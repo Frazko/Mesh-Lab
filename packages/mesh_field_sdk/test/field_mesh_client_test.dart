@@ -7,7 +7,10 @@ import 'package:mesh_host/mesh_host.dart';
 import 'package:mesh_field_sdk/mesh_field_sdk.dart';
 
 class FakeGateway
-    implements FieldMeshGateway, FieldMeshEnrollmentAccessGateway {
+    implements
+        FieldMeshGateway,
+        FieldMeshEnrollmentAccessGateway,
+        FieldMeshAuthorityHandoffGateway {
   bool secure = false;
   bool awareSecure = false;
   bool active = false;
@@ -25,6 +28,11 @@ class FakeGateway
   List<FieldCertifiedVoicePayload> verifiedIncomingVoice = const [];
   FieldEnrollmentAccessPolicy? enrollmentAccess;
   bool enrollmentAuthority = true;
+  Uint8List? preparedSuccessor;
+  int? preparedValidUntil;
+  Uint8List? rotatedHandoff;
+  Uint8List? installedPolicy;
+  Uint8List? installedHandoff;
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -77,6 +85,31 @@ class FakeGateway
 
   @override
   Future<bool> canIssueEnrollment() async => enrollmentAuthority;
+  @override
+  Future<Uint8List> prepareAuthorityHandoff(
+    Uint8List successor,
+    int validUntilSeconds,
+  ) async {
+    preparedSuccessor = Uint8List.fromList(successor);
+    preparedValidUntil = validUntilSeconds;
+    return Uint8List.fromList(const [1, 2, 3]);
+  }
+
+  @override
+  Future<Uint8List> rotateAuthority(Uint8List handoff) async {
+    rotatedHandoff = Uint8List.fromList(handoff);
+    return Uint8List.fromList(const [4, 5, 6]);
+  }
+
+  @override
+  Future<FieldGroup> installRotatedPolicy(
+    Uint8List policy,
+    Uint8List handoff,
+  ) async {
+    installedPolicy = Uint8List.fromList(policy);
+    installedHandoff = Uint8List.fromList(handoff);
+    return const FieldGroup(configured: true, epoch: 3);
+  }
 
   @override
   Future<FieldDelivery?> delivery(String logicalId) async => noDeliveryEvidence
@@ -344,6 +377,51 @@ void main() {
       expect(await sdk.canIssueEnrollment(), isTrue);
       await expectLater(
         FieldMeshClient(gateway: _LegacyGateway()).canIssueEnrollment(),
+        throwsUnsupportedError,
+      );
+    },
+  );
+
+  test(
+    'authority handoff is bounded and delegated without private keys',
+    () async {
+      final gateway = FakeGateway();
+      final sdk = FieldMeshClient(gateway: gateway);
+      const successor =
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      final validUntil = DateTime.now().add(const Duration(minutes: 10));
+
+      final handoff = await sdk.prepareAuthorityHandoff(successor, validUntil);
+      expect(handoff, [1, 2, 3]);
+      expect(gateway.preparedSuccessor, hasLength(32));
+      expect(
+        gateway.preparedValidUntil,
+        greaterThan(DateTime.now().millisecondsSinceEpoch ~/ 1000),
+      );
+
+      final policy = await sdk.rotateAuthority(handoff);
+      expect(policy, [4, 5, 6]);
+      expect(gateway.rotatedHandoff, handoff);
+      expect(
+        await sdk.installRotatedPolicy(policy, handoff),
+        const FieldGroup(configured: true, epoch: 3),
+      );
+      expect(gateway.installedPolicy, policy);
+      expect(gateway.installedHandoff, handoff);
+
+      await expectLater(
+        sdk.prepareAuthorityHandoff(successor.toUpperCase(), validUntil),
+        throwsArgumentError,
+      );
+      await expectLater(
+        sdk.prepareAuthorityHandoff(
+          successor,
+          DateTime.now().subtract(const Duration(seconds: 1)),
+        ),
+        throwsArgumentError,
+      );
+      await expectLater(
+        FieldMeshClient(gateway: _LegacyGateway()).rotateAuthority(handoff),
         throwsUnsupportedError,
       );
     },

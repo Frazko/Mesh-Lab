@@ -1122,6 +1122,68 @@ class MeshHostApi {
     return pigeonVar_replyValue! as bool;
   }
 
+  /// The current authority signs a short-lived public handoff to an existing
+  /// certified member. The host does not reveal its private authority key.
+  Future<Uint8List> prepareAuthorityHandoff(Uint8List successor, int validUntil) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.prepareAuthorityHandoff$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[successor, validUntil]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  /// The promoted member creates the next policy on its own protected store.
+  Future<Uint8List> rotateAuthority(Uint8List handoff) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.rotateAuthority$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[handoff]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  /// Existing members accept an authority replacement only with the matching
+  /// old-authority handoff.
+  Future<GroupInfo> installRotatedPolicy(Uint8List policy, Uint8List handoff) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.installRotatedPolicy$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[policy, handoff]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as GroupInfo;
+  }
+
   Future<GroupInfo> installPolicy(Uint8List policy) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.mesh_host.MeshHostApi.installPolicy$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

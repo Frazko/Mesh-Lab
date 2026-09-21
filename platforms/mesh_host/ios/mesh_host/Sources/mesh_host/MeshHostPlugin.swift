@@ -79,6 +79,34 @@ public class MeshHostPlugin: NSObject, FlutterPlugin, MeshHostApi {
       try NativeRuntime.shared.canIssueEnrollment(try SecureIdentity().groupMaterial())
     }
   }
+  func prepareAuthorityHandoff(successor: FlutterStandardTypedData, validUntil: Int64) async throws -> FlutterStandardTypedData {
+    try await execute {
+      let now = Int64(Date().timeIntervalSince1970)
+      guard successor.data.count == 32, validUntil > now else {
+        throw PigeonError(code: "GROUP_AUTHORITY_TRANSFER_FAILED", message: "El relevo de la Malla no es válido.", details: nil)
+      }
+      return FlutterStandardTypedData(bytes: Data(try NativeRuntime.shared.prepareAuthorityHandoff(
+        try SecureIdentity().groupMaterial(), successor: Array(successor.data), validUntil: UInt64(validUntil))))
+    }
+  }
+  func rotateAuthority(handoff: FlutterStandardTypedData) async throws -> FlutterStandardTypedData {
+    try await execute {
+      guard !handoff.data.isEmpty && handoff.data.count <= 512 else {
+        throw PigeonError(code: "GROUP_AUTHORITY_TRANSFER_FAILED", message: "La autorización de relevo no es válida.", details: nil)
+      }
+      let policy = try NativeRuntime.shared.rotateAuthority(
+        try SecureIdentity().groupMaterial(), handoff: Array(handoff.data))
+      self.onMain { self.aware.policyChanged() }
+      return FlutterStandardTypedData(bytes: Data(policy))
+    }
+  }
+  func installRotatedPolicy(policy: FlutterStandardTypedData, handoff: FlutterStandardTypedData) async throws -> GroupInfo {
+    try await execute {
+      let epoch = try NativeRuntime.shared.installRotatedPolicy(Array(policy.data), handoff: Array(handoff.data))
+      self.onMain { self.aware.policyChanged() }
+      return GroupInfo(configured: epoch > 0, epoch: epoch)
+    }
+  }
   func installPolicy(policy: FlutterStandardTypedData) async throws -> GroupInfo {
     try await execute {
       let epoch = try NativeRuntime.shared.installPolicy(Array(policy.data))

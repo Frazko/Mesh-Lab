@@ -271,6 +271,17 @@ abstract interface class FieldMeshEnrollmentAccessController {
   Future<bool> canIssueEnrollment();
 }
 
+/// Optional authority-rotation capability. Its byte payloads are public signed
+/// transport data; private authority material never leaves the native host.
+abstract interface class FieldMeshAuthorityHandoffController {
+  Future<Uint8List> prepareAuthorityHandoff(
+    String successorMemberId,
+    DateTime validUntil,
+  );
+  Future<Uint8List> rotateAuthority(Uint8List handoff);
+  Future<FieldGroup> installRotatedPolicy(Uint8List policy, Uint8List handoff);
+}
+
 /// Optional capability for products that already persist their own action ID.
 ///
 /// The base [FieldMeshSdk] remains source-compatible for existing products.

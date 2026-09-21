@@ -949,6 +949,14 @@ protocol MeshHostApi {
   /// Reports whether this identity is the authority certified in the current
   /// group policy. It never exposes authority keys or membership material.
   func canIssueEnrollment() async throws -> Bool
+  /// The current authority signs a short-lived public handoff to an existing
+  /// certified member. The host does not reveal its private authority key.
+  func prepareAuthorityHandoff(successor: FlutterStandardTypedData, validUntil: Int64) async throws -> FlutterStandardTypedData
+  /// The promoted member creates the next policy on its own protected store.
+  func rotateAuthority(handoff: FlutterStandardTypedData) async throws -> FlutterStandardTypedData
+  /// Existing members accept an authority replacement only with the matching
+  /// old-authority handoff.
+  func installRotatedPolicy(policy: FlutterStandardTypedData, handoff: FlutterStandardTypedData) async throws -> GroupInfo
   func installPolicy(policy: FlutterStandardTypedData) async throws -> GroupInfo
   func configureEnrollmentAccess(policy: EnrollmentAccessPolicy) async throws
   func clearEnrollmentAccess() async throws
@@ -1103,6 +1111,64 @@ class MeshHostApiSetup {
       }
     } else {
       canIssueEnrollmentChannel.setMessageHandler(nil)
+    }
+    /// The current authority signs a short-lived public handoff to an existing
+    /// certified member. The host does not reveal its private authority key.
+    let prepareAuthorityHandoffChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.prepareAuthorityHandoff\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      prepareAuthorityHandoffChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let successorArg = args[0] as! FlutterStandardTypedData
+        let validUntilArg = args[1] as! Int64
+        Task { @MainActor in
+          do {
+            let result = try await api.prepareAuthorityHandoff(successor: successorArg, validUntil: validUntilArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      prepareAuthorityHandoffChannel.setMessageHandler(nil)
+    }
+    /// The promoted member creates the next policy on its own protected store.
+    let rotateAuthorityChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.rotateAuthority\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      rotateAuthorityChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let handoffArg = args[0] as! FlutterStandardTypedData
+        Task { @MainActor in
+          do {
+            let result = try await api.rotateAuthority(handoff: handoffArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      rotateAuthorityChannel.setMessageHandler(nil)
+    }
+    /// Existing members accept an authority replacement only with the matching
+    /// old-authority handoff.
+    let installRotatedPolicyChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.installRotatedPolicy\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      installRotatedPolicyChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let policyArg = args[0] as! FlutterStandardTypedData
+        let handoffArg = args[1] as! FlutterStandardTypedData
+        Task { @MainActor in
+          do {
+            let result = try await api.installRotatedPolicy(policy: policyArg, handoff: handoffArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      installRotatedPolicyChannel.setMessageHandler(nil)
     }
     let installPolicyChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.mesh_host.MeshHostApi.installPolicy\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

@@ -90,10 +90,24 @@ abstract interface class FieldMeshEnrollmentAccessGateway {
   Future<bool> canIssueEnrollment();
 }
 
+/// Narrow native extension for a product-managed leadership transfer. All
+/// payloads are public signed bytes and remain validated by the host.
+abstract interface class FieldMeshAuthorityHandoffGateway {
+  Future<Uint8List> prepareAuthorityHandoff(
+    Uint8List successor,
+    int validUntilSeconds,
+  );
+  Future<Uint8List> rotateAuthority(Uint8List handoff);
+  Future<FieldGroup> installRotatedPolicy(Uint8List policy, Uint8List handoff);
+}
+
 /// Default gateway for iOS and Android. It maps mutable Pigeon DTOs into
 /// immutable product DTOs at the package boundary.
 final class MeshHostGateway
-    implements FieldMeshGateway, FieldMeshEnrollmentAccessGateway {
+    implements
+        FieldMeshGateway,
+        FieldMeshEnrollmentAccessGateway,
+        FieldMeshAuthorityHandoffGateway {
   MeshHostGateway({MeshHostApi? api}) : _api = api ?? MeshHostApi();
 
   final MeshHostApi _api;
@@ -154,6 +168,19 @@ final class MeshHostGateway
 
   @override
   Future<bool> canIssueEnrollment() => _api.canIssueEnrollment();
+  @override
+  Future<Uint8List> prepareAuthorityHandoff(
+    Uint8List successor,
+    int validUntilSeconds,
+  ) => _api.prepareAuthorityHandoff(successor, validUntilSeconds);
+  @override
+  Future<Uint8List> rotateAuthority(Uint8List handoff) =>
+      _api.rotateAuthority(handoff);
+  @override
+  Future<FieldGroup> installRotatedPolicy(
+    Uint8List policy,
+    Uint8List handoff,
+  ) async => _group(await _api.installRotatedPolicy(policy, handoff));
   @override
   Future<FieldBluetoothStatus> bluetoothStatus() async =>
       _bluetooth(await _api.bluetoothInfo());
@@ -253,6 +280,7 @@ final class FieldMeshClient
         FieldMeshActionSender,
         FieldMeshVoiceContextSender,
         FieldMeshEnrollmentAccessController,
+        FieldMeshAuthorityHandoffController,
         FieldMeshVerifiedIncomingSource,
         FieldMeshVerifiedIncomingVoiceSource {
   FieldMeshClient({FieldMeshGateway? gateway})
@@ -312,6 +340,93 @@ final class FieldMeshClient
       throw UnsupportedError('El host no admite comprobar la autoridad.');
     }
     return gateway.canIssueEnrollment();
+  }
+
+  @override
+  Future<Uint8List> prepareAuthorityHandoff(
+    String successorMemberId,
+    DateTime validUntil,
+  ) async {
+    final gateway = _gateway is FieldMeshAuthorityHandoffGateway
+        ? _gateway as FieldMeshAuthorityHandoffGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError('El host no admite transferir autoridad.');
+    }
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(successorMemberId)) {
+      throw ArgumentError.value(
+        successorMemberId,
+        'successorMemberId',
+        'Miembro sucesor no válido',
+      );
+    }
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final validUntilSeconds = validUntil.millisecondsSinceEpoch ~/ 1000;
+    if (validUntilSeconds <= now) {
+      throw ArgumentError.value(
+        validUntil,
+        'validUntil',
+        'El relevo ya venció',
+      );
+    }
+    final bytes = await gateway.prepareAuthorityHandoff(
+      Uint8List.fromList([
+        for (var index = 0; index < successorMemberId.length; index += 2)
+          int.parse(successorMemberId.substring(index, index + 2), radix: 16),
+      ]),
+      validUntilSeconds,
+    );
+    if (bytes.isEmpty || bytes.length > 512) {
+      throw StateError('El host devolvió un relevo de autoridad inválido');
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<Uint8List> rotateAuthority(Uint8List handoff) async {
+    final gateway = _gateway is FieldMeshAuthorityHandoffGateway
+        ? _gateway as FieldMeshAuthorityHandoffGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError('El host no admite rotar autoridad.');
+    }
+    if (handoff.isEmpty || handoff.length > 512) {
+      throw ArgumentError.value(
+        handoff,
+        'handoff',
+        'Relevo de autoridad no válido',
+      );
+    }
+    final policy = await gateway.rotateAuthority(Uint8List.fromList(handoff));
+    if (policy.isEmpty || policy.length > 12 * 1024) {
+      throw StateError('El host devolvió una política rotada inválida');
+    }
+    return Uint8List.fromList(policy);
+  }
+
+  @override
+  Future<FieldGroup> installRotatedPolicy(
+    Uint8List policy,
+    Uint8List handoff,
+  ) async {
+    final gateway = _gateway is FieldMeshAuthorityHandoffGateway
+        ? _gateway as FieldMeshAuthorityHandoffGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError(
+        'El host no admite instalar una autoridad rotada.',
+      );
+    }
+    if (policy.isEmpty ||
+        policy.length > 12 * 1024 ||
+        handoff.isEmpty ||
+        handoff.length > 512) {
+      throw ArgumentError('Política o relevo de autoridad no válido');
+    }
+    return gateway.installRotatedPolicy(
+      Uint8List.fromList(policy),
+      Uint8List.fromList(handoff),
+    );
   }
 
   @override

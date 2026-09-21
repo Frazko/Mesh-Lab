@@ -125,6 +125,20 @@ final class WifiAwareAccess {
     return info(hasGroup: true)
   }
 
+  /// A verified roster or authority epoch changed. Existing Noise sessions are
+  /// bound to the old policy, so they are retired before discovery reopens. The
+  /// system pairing remains intact and the radio reconnects without a user step.
+  func policyChanged() {
+    guard active else { return }
+    guard #available(iOS 26.0, *) else { return }
+    if let plane = currentPlane() {
+      for link in plane.links.values { close(link) }
+      plane.links.removeAll(); plane.writers.removeAll(); plane.connectingEndpoints.removeAll()
+    }
+    detail = "Política de Malla actualizada. Reconectando Wi‑Fi Aware…"
+    refreshPairedDevices()
+  }
+
   /// Returns true only while there is a complete Noise-authenticated WFA path.
   /// The Pigeon send API is synchronous, so actual stream writing continues in
   /// the ordered writer actor after this admission check.
