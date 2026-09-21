@@ -6,7 +6,7 @@ La tabla inicial conserva la línea base del plan; las secciones fechadas poster
 
 ## Puente seguro Internet–Malla
 
-**Actualizado: 2026-09-21. Implementación local: 52%; gate físico y de servidor: pendiente.**
+**Actualizado: 2026-09-21. Implementación local: 60%; gate físico y de servidor: pendiente.**
 El núcleo añade un dominio de firma exclusivo para relevo a nube. Un host sólo
 puede producir una prueba si su política Field vigente lo certifica como
 miembro: devuelve el identificador público de grupo de 32 bytes, la época y 64
@@ -1310,3 +1310,12 @@ instalación; la última quedó esperando un daemon Gradle compartido que ya est
 ocupado, así que se detuvo sin afectar ese proceso. La compilación se repetirá
 cuando el daemon esté libre. Sigue pendiente la prueba física de dos notas de
 voz fuera de orden y de su reproducción individual por ID.
+
+
+### Pasarela certificada Convoy → Internet
+
+**Actualizado: 2026-09-21. Implementación local: 60%; gates remoto y físico: pendientes.**
+
+El SDK ya firma una prueba de relevo ligada al grupo Field, época, autor, UUID y contenido canónico. Convoy registra la línea pública del grupo cuando el líder prepara o recupera su política y un vecino con cobertura conserva texto ajeno certificado en una cola durable. El servicio remoto sólo acepta ese texto si verifica la firma Ed25519 original, miembro, convoy, participación de puente y autor, ventana de cinco días, grupo/época vigentes e idempotencia. El relé no conoce ni recibe secretos Field y nunca puede sustituir al autor.
+
+Las pruebas Rust existentes protegen la prueba del SDK; Convoy añade contratos Deno de firma y registro, pruebas unitarias de codec, proyector, adaptadores HTTP, compatibilidad, persistencia y recuperación de cola, y dos E2E locales que recorren recepción certificada→proyección→chat→cola durable→frontera de nube y rechazo por autor distinto. La campaña local suma 178 pruebas cercanas aprobadas con 90.6% de cobertura del bloque. Quedan aplicar la migración y dos funciones Edge en el remoto, ejecutar el E2E contra la base desplegada —la reconstrucción local está bloqueada por migraciones históricas duplicadas—, probar tres teléfonos y extender el relevo de servidor a voz y GPS.
