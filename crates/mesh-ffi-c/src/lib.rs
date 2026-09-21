@@ -1912,7 +1912,8 @@ pub fn secure_store_sign_cloud_relay(
         let signature = identity
             .sign(active.scope, mesh_crypto::Domain::CloudRelay, canonical)
             .map_err(|_| Error::InvalidArgument)?;
-        let mut output = Vec::with_capacity(72);
+        let mut output = Vec::with_capacity(104);
+        output.extend(active.scope.group);
         output.extend(active.scope.epoch.to_be_bytes());
         output.extend(signature);
         Ok(output)
@@ -3765,8 +3766,8 @@ mod tests {
             Ok(1)
         );
         let proof = secure_store_sign_cloud_relay(handle, &seed, b"canonical action", 101).unwrap();
-        assert_eq!(proof.len(), 72);
-        assert_eq!(u64::from_be_bytes(proof[..8].try_into().unwrap()), 1);
+        assert_eq!(proof.len(), 104);
+        assert_eq!(u64::from_be_bytes(proof[32..40].try_into().unwrap()), 1);
         let scope = stores()
             .lock()
             .unwrap()
@@ -3777,7 +3778,8 @@ mod tests {
             .unwrap()
             .unwrap()
             .scope;
-        let signature: [u8; 64] = proof[8..].try_into().unwrap();
+        assert_eq!(&proof[..32], &scope.group);
+        let signature: [u8; 64] = proof[40..].try_into().unwrap();
         mesh_crypto::verify(
             member,
             scope,

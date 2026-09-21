@@ -37,6 +37,7 @@ class FakeGateway
   Uint8List exportedPolicy = Uint8List.fromList(const [4, 5, 6]);
   Uint8List? lastCloudRelayCanonical;
   FieldCloudRelayProof cloudRelayProof = FieldCloudRelayProof(
+    groupId: Uint8List.fromList(List<int>.filled(32, 5)),
     epoch: 1,
     signature: Uint8List.fromList(List<int>.filled(64, 7)),
   );
@@ -525,6 +526,22 @@ void main() {
   );
 
   test(
+    'measures the sealed text envelope against the native radio budget',
+    () async {
+      final gateway = FakeGateway()..secure = true;
+      final sdk = FieldMeshClient(gateway: gateway);
+      const logicalId = '0123456789abcdef0123456789abcdef';
+
+      expect(
+        (await sdk.sendTextWithLogicalId('x' * 1400, logicalId))?.logicalId,
+        logicalId,
+      );
+      expect(utf8.encode(gateway.lastText).length, lessThanOrEqualTo(2048));
+      expect(await sdk.sendTextWithLogicalId('x' * 2000, logicalId), isNull);
+    },
+  );
+
+  test(
     'preserves a product logical ID for text, location, and voice',
     () async {
       const actionId = '0123456789abcdef0123456789abcdef';
@@ -629,7 +646,7 @@ void main() {
       final sdk = FieldMeshClient(gateway: gateway);
 
       expect(await sdk.sendText('   '), isNull);
-      expect(await sdk.sendText('x' * 501), isNull);
+      expect(await sdk.sendText('x' * 2000), isNull);
       gateway.acceptText = false;
       expect(await sdk.sendText('queue failure'), isNull);
       expect(
@@ -970,6 +987,7 @@ void main() {
 
       final proof = await sdk.signCloudRelay(canonical);
 
+      expect(proof.groupId, hasLength(32));
       expect(proof.epoch, 1);
       expect(proof.signature, hasLength(64));
       expect(gateway.lastCloudRelayCanonical, canonical);

@@ -424,28 +424,31 @@ struct GroupInfo: Hashable, CustomStringConvertible {
   }
 }
 
-/// A Field-author proof for a canonical cloud-relay envelope. The epoch and
-/// signature are public verification data; keys, roster and group secrets stay
-/// native.
+/// A Field-author proof for a canonical cloud-relay envelope. The group identifier, epoch and
+/// signature are public verification data; keys and roster stay native.
 ///
 /// Generated class from Pigeon that represents data sent in messages.
 struct CloudRelayProof: Hashable, CustomStringConvertible {
+  var groupId: FlutterStandardTypedData
   var epoch: Int64
   var signature: FlutterStandardTypedData
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> CloudRelayProof? {
-    let epoch = pigeonVar_list[0] as! Int64
-    let signature = pigeonVar_list[1] as! FlutterStandardTypedData
+    let groupId = pigeonVar_list[0] as! FlutterStandardTypedData
+    let epoch = pigeonVar_list[1] as! Int64
+    let signature = pigeonVar_list[2] as! FlutterStandardTypedData
 
     return CloudRelayProof(
+      groupId: groupId,
       epoch: epoch,
       signature: signature
     )
   }
   func toList() -> [Any?] {
     return [
+      groupId,
       epoch,
       signature,
     ]
@@ -454,17 +457,18 @@ struct CloudRelayProof: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return MeshApiPigeonInternal.deepEquals(lhs.epoch, rhs.epoch) && MeshApiPigeonInternal.deepEquals(lhs.signature, rhs.signature)
+    return MeshApiPigeonInternal.deepEquals(lhs.groupId, rhs.groupId) && MeshApiPigeonInternal.deepEquals(lhs.epoch, rhs.epoch) && MeshApiPigeonInternal.deepEquals(lhs.signature, rhs.signature)
   }
 
   func hash(into hasher: inout Hasher) {
     hasher.combine("CloudRelayProof")
+    MeshApiPigeonInternal.deepHash(value: groupId, hasher: &hasher)
     MeshApiPigeonInternal.deepHash(value: epoch, hasher: &hasher)
     MeshApiPigeonInternal.deepHash(value: signature, hasher: &hasher)
   }
 
   public var description: String {
-    return "CloudRelayProof(epoch: \(String(describing: epoch)), signature: \(String(describing: signature)))"
+    return "CloudRelayProof(groupId: \(String(describing: groupId)), epoch: \(String(describing: epoch)), signature: \(String(describing: signature)))"
   }
 }
 

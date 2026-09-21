@@ -195,10 +195,13 @@ final class MeshHostGateway
       throw ArgumentError.value(canonical, 'canonical', 'must be bounded');
     }
     final proof = await _api.signCloudRelay(canonical);
-    if (proof.epoch <= 0 || proof.signature.length != 64) {
+    if (proof.groupId.length != 32 ||
+        proof.epoch <= 0 ||
+        proof.signature.length != 64) {
       throw StateError('Native cloud-relay proof is invalid');
     }
     return FieldCloudRelayProof(
+      groupId: Uint8List.fromList(proof.groupId),
       epoch: proof.epoch,
       signature: Uint8List.fromList(proof.signature),
     );
@@ -379,7 +382,9 @@ final class FieldMeshClient
       throw ArgumentError.value(canonical, 'canonical', 'must be bounded');
     }
     final proof = await gateway.signCloudRelay(canonical);
-    if (proof.epoch <= 0 || proof.signature.length != 64) {
+    if (proof.groupId.length != 32 ||
+        proof.epoch <= 0 ||
+        proof.signature.length != 64) {
       throw StateError('La prueba de relevo nativa no es válida.');
     }
     return proof;
@@ -536,12 +541,15 @@ final class FieldMeshClient
 
   Future<FieldDelivery?> _sendText(String message, {String? logicalId}) async {
     final body = message.trim();
-    if (body.isEmpty || body.length > 500 || !(await status()).secure) {
-      return null;
-    }
+    if (body.isEmpty || !(await status()).secure) return null;
     final actionId = _actionId(logicalId);
-    if (actionId == null ||
-        !await _gateway.sendText(_encodeAction(body, actionId), actionId)) {
+    if (actionId == null) return null;
+    final encoded = _encodeAction(body, actionId);
+    // The native radio admits at most 2 KiB. Measure the sealed product
+    // envelope, not just visible characters, so authenticated metadata cannot
+    // turn an apparently valid message into a silent transport failure.
+    if (utf8.encode(encoded).length > 2048 ||
+        !await _gateway.sendText(encoded, actionId)) {
       return null;
     }
     return await delivery(actionId) ??

@@ -443,19 +443,22 @@ data class GroupInfo (
  * Generated class from Pigeon that represents data sent in messages.
  */
 data class CloudRelayProof (
+  val groupId: ByteArray,
   val epoch: Long,
   val signature: ByteArray
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): CloudRelayProof {
-      val epoch = pigeonVar_list[0] as Long
-      val signature = pigeonVar_list[1] as ByteArray
-      return CloudRelayProof(epoch, signature)
+      val groupId = pigeonVar_list[0] as ByteArray
+      val epoch = pigeonVar_list[1] as Long
+      val signature = pigeonVar_list[2] as ByteArray
+      return CloudRelayProof(groupId, epoch, signature)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
+      groupId,
       epoch,
       signature,
     )
@@ -468,17 +471,18 @@ data class CloudRelayProof (
       return true
     }
     val other = other as CloudRelayProof
-    return MeshApiPigeonUtils.deepEquals(this.epoch, other.epoch) && MeshApiPigeonUtils.deepEquals(this.signature, other.signature)
+    return MeshApiPigeonUtils.deepEquals(this.groupId, other.groupId) && MeshApiPigeonUtils.deepEquals(this.epoch, other.epoch) && MeshApiPigeonUtils.deepEquals(this.signature, other.signature)
   }
 
   override fun hashCode(): Int {
     var result = javaClass.hashCode()
+    result = 31 * result + MeshApiPigeonUtils.deepHash(this.groupId)
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.epoch)
     result = 31 * result + MeshApiPigeonUtils.deepHash(this.signature)
     return result
   }
   override fun toString(): String {
-    return "CloudRelayProof(epoch=$epoch, signature=${signature.contentToString()})"
+    return "CloudRelayProof(groupId=${groupId.contentToString()}, epoch=$epoch, signature=${signature.contentToString()})"
   }
 }
 

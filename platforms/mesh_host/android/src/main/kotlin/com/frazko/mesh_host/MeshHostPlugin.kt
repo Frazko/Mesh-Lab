@@ -116,7 +116,7 @@ internal object NativeRuntime {
         return try {
             NativeBridge.secureStoreSignCloudRelay(
                 storeHandle, material.identitySeed, canonical, System.currentTimeMillis() / 1000,
-            ).also { check(it.size == 72) { "MESH_1" } }
+            ).also { check(it.size == 104) { "MESH_1" } }
         } finally { material.wipe() }
     }
     /** Produces a public short-lived handoff only from the current authority. */
@@ -377,9 +377,9 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
     override suspend fun signCloudRelay(canonical: ByteArray): CloudRelayProof = withContext(NativeRuntime.dispatcher) {
         try {
             val proof = NativeRuntime.signCloudRelay(identity.groupMaterial(), canonical)
-            val epoch = java.nio.ByteBuffer.wrap(proof, 0, 8).long
+            val epoch = java.nio.ByteBuffer.wrap(proof, 32, 8).long
             check(epoch > 0) { "MESH_1" }
-            CloudRelayProof(epoch, proof.copyOfRange(8, 72))
+            CloudRelayProof(proof.copyOfRange(0, 32), epoch, proof.copyOfRange(40, 104))
         } catch (e: Exception) {
             throw FlutterError("CLOUD_RELAY_UNAVAILABLE", "No se pudo firmar la acción de Malla.", null)
         }

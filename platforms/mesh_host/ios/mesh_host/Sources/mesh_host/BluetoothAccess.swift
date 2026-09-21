@@ -747,7 +747,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   func sendText(_ message: String, logicalId: String) -> Bool {
     let bytes = Array(message.utf8)
     guard let id = Self.decodeLogicalId(logicalId) else { return false }
-    guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, bytes.count <= 500,
+    guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, bytes.count <= 2048,
           let material = try? SecureIdentity().groupMaterial(),
           let queued = runtime({ try NativeRuntime.shared.enqueueDurableText(bytes, logicalId: id, material: material) }),
           queued > 0 else { return false }

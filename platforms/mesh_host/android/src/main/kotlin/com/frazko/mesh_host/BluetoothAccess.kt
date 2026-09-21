@@ -1248,7 +1248,7 @@ internal class BluetoothAccess(
     @Synchronized fun sendText(text: String, logicalId: String): Boolean {
         val bytes = text.toByteArray(Charsets.UTF_8)
         val id = decodeLogicalId(logicalId) ?: return false
-        if (text.isBlank() || bytes.size > 500) return false
+        if (text.isBlank() || bytes.size > 2048) return false
         val queued = try { NativeRuntime.enqueueDurableText(identity.groupMaterial(), bytes, id) }
         catch (_: Exception) { return false }
         if (queued <= 0) return false

@@ -6,26 +6,34 @@ La tabla inicial conserva la línea base del plan; las secciones fechadas poster
 
 ## Puente seguro Internet–Malla
 
-**Actualizado: 2026-09-21. Implementación local: 42%; gate físico: pendiente.**
+**Actualizado: 2026-09-21. Implementación local: 52%; gate físico y de servidor: pendiente.**
 El núcleo añade un dominio de firma exclusivo para relevo a nube. Un host sólo
 puede producir una prueba si su política Field vigente lo certifica como
-miembro: devuelve la época y 64 bytes de firma sobre el sobre canónico, sin
-exponer la semilla de identidad, el secreto del grupo ni el roster. Las pruebas
-Rust verifican que la prueba falla sin política o con otra identidad y que no
-es válida si cambia el contenido; además queda separada de certificados,
+miembro: devuelve el identificador público de grupo de 32 bytes, la época y 64
+bytes de firma sobre el sobre canónico. No expone la semilla de identidad, las
+llaves de entrega ni el roster. El grupo se incluye porque un servidor no puede
+verificar de forma segura una firma sin saber qué política Field la emitió. Las
+pruebas Rust verifican que la prueba falla sin política o con otra identidad,
+que el grupo y época corresponden a la política activa y que la firma deja de
+ser válida si cambia el contenido; además queda separada de certificados,
 objetos, recibos y handoffs. Pigeon, JNI, Swift y la fachada
 `FieldMeshCloudRelaySigner` lo trasladan como capacidad opcional. La suite del
-SDK ahora tiene 33 pruebas y valida límites y ausencia de llaves en Flutter.
+SDK tiene 34 pruebas y valida límites, grupo público y ausencia de llaves en
+Flutter.
 
 La identidad que se entrega al producto ahora es la clave pública Ed25519
 codificada en hexadecimal, exactamente la identidad certificada por la radio.
 Antes se entregaba un hash de presentación: no era secreto pero tampoco podía
 ser comparado por el host ni verificado por un servidor. Al volver a entrar a
 un convoy con cobertura, Convoy sustituye idempotentemente el binding antiguo
-por esta clave pública real. Falta que el adaptador de Convoy adjunte el sobre
-a cada acción, una función de servidor verifique autor, binding, participación,
-época e idempotencia, y una cola durable permita a un vecino con Internet
-publicar la acción de un miembro sin cobertura.
+por esta clave pública real. Convoy ya adjunta el sobre a texto y ubicación antes de sellarlos por Field;
+la prueba funcional atraviesa adaptador, codec y host simulado con un texto de
+500 caracteres y firma completa. El transporte interno admite 2 KiB y mide el
+sobre sellado, mientras Convoy limita su sobre interno a 1.3 KiB para que el
+texto visible de 500 caracteres siga cabiendo. Falta registrar en backend el
+grupo Field público por convoy, una función de servidor que verifique autor,
+binding, participación, grupo, época e idempotencia, y una cola durable que
+permita a un vecino con Internet publicar la acción de un miembro sin cobertura.
 
 ## C3 — admisión automática gobernada por Convoy
 

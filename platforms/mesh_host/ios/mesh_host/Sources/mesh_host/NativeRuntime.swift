@@ -435,7 +435,7 @@ final class NativeRuntime {
         }
       }
     }
-    guard proof.count == 72 else { throw NativeFailure.status(1) }
+    guard proof.count == 104 else { throw NativeFailure.status(1) }
     return proof
   }
   /// Signs a public, short-lived authority handoff. The successor has to be an

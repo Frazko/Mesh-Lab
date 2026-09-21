@@ -251,10 +251,16 @@ abstract interface class FieldMeshPresenceController {
 
 /// Public proof that lets a product server verify an action received over the
 /// Field radios. It binds a canonical product envelope to the active Field
-/// group epoch, without exposing any identity seed or group secret.
+/// group identifier and epoch, without exposing any identity seed or roster.
 final class FieldCloudRelayProof {
-  const FieldCloudRelayProof({required this.epoch, required this.signature});
+  const FieldCloudRelayProof({
+    required this.groupId,
+    required this.epoch,
+    required this.signature,
+  });
 
+  /// Public Field group identifier, exactly 32 bytes.
+  final Uint8List groupId;
   final int epoch;
   final Uint8List signature;
 }

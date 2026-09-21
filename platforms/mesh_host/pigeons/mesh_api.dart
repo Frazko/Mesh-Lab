@@ -64,11 +64,11 @@ class GroupInfo {
   int epoch;
 }
 
-/// A Field-author proof for a canonical cloud-relay envelope. The epoch and
-/// signature are public verification data; keys, roster and group secrets stay
-/// native.
+/// A Field-author proof for a canonical cloud-relay envelope. The group identifier, epoch and
+/// signature are public verification data; keys and roster stay native.
 class CloudRelayProof {
-  CloudRelayProof({required this.epoch, required this.signature});
+  CloudRelayProof({required this.groupId, required this.epoch, required this.signature});
+  Uint8List groupId;
   int epoch;
   Uint8List signature;
 }

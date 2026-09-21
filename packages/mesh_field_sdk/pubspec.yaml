@@ -1,6 +1,6 @@
 name: mesh_field_sdk
 description: Cross-product Flutter facade for nearby Mesh field sessions.
-version: 0.2.4
+version: 0.2.5
 publish_to: none
 environment:
   sdk: ^3.13.2

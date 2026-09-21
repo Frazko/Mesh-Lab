@@ -1133,7 +1133,7 @@ pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreCanIss
 }
 #[no_mangle]
 pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreSignCloudRelay(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     handle: jlong,
     identity_seed: JByteArray,
