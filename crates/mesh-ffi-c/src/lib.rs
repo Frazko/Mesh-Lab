@@ -3,9 +3,9 @@ use mesh_crypto::{DeliverySecret, IdentitySigningKey, OsRandom, RandomSource, Sc
 use mesh_link::Frame;
 use mesh_object::ObjectPolicy;
 use mesh_protocol::{
-    issue_certificate, issue_receipt_ack, receipt_ack_route, receipt_route, seal_message,
-    verify_enrollment_request, verify_receipt_ack, CertificateClaims, DurableRecord, PolicyBundle,
-    SealRequest, VerifiedRoster,
+    issue_authority_handoff, issue_certificate, issue_receipt_ack, receipt_ack_route,
+    receipt_route, seal_message, verify_enrollment_request, verify_receipt_ack, AuthorityHandoff,
+    CertificateClaims, DurableRecord, PolicyBundle, SealRequest, VerifiedRoster,
 };
 use mesh_replication::{
     broadcast_audiences, neighbor_plan, RelayCache, RelayDecision, RelayFrame, RelayId,
@@ -1682,6 +1682,163 @@ pub fn secure_store_issue_enrollment(
     })
 }
 
+/// Creates a bounded, signed authority handoff without changing the active policy.
+/// The successor must already be an authenticated member of the current roster.
+/// The returned bytes are public transport data; the former authority private seed
+/// is copied into a zeroizing buffer and never leaves this function.
+pub fn secure_store_prepare_authority_handoff(
+    handle: u64,
+    identity_seed: &[u8],
+    successor: &[u8],
+    valid_until: u64,
+    now: u64,
+) -> Result<Vec<u8>, Error> {
+    guarded(|| {
+        if identity_seed.len() != 32 || successor.len() != 32 || valid_until <= now || now == 0 {
+            return Err(Error::InvalidArgument);
+        }
+        let successor: [u8; 32] = successor.try_into().map_err(|_| Error::InvalidArgument)?;
+        let mut seed = zeroize::Zeroizing::new([0; 32]);
+        seed.copy_from_slice(identity_seed);
+        let authority = IdentitySigningKey::import(seed);
+        let registry = stores().lock().map_err(|_| Error::InternalInvariant)?;
+        let store = registry.stores.get(&handle).ok_or(Error::InvalidHandle)?;
+        let active = store
+            .active_policy(now)
+            .map_err(|_| Error::InternalInvariant)?
+            .ok_or(Error::InvalidArgument)?;
+        if active.authority != authority.public_key() {
+            return Err(Error::InvalidArgument);
+        }
+        let bundle = store
+            .policy_bundle()
+            .map_err(|_| Error::InternalInvariant)?
+            .ok_or(Error::InternalInvariant)?;
+        let roster = bundle.verify(now).map_err(|_| Error::InternalInvariant)?;
+        let successor_member = MemberId(successor);
+        if !roster.contains_member(successor_member)
+            || !roster
+                .member_claims()
+                .iter()
+                .any(|claim| claim.member == successor_member && claim.signing_key == successor)
+        {
+            return Err(Error::InvalidArgument);
+        }
+        issue_authority_handoff(
+            &authority,
+            active.scope,
+            roster.digest(),
+            successor,
+            valid_until,
+        )
+        .and_then(|handoff| handoff.encode())
+        .map_err(|_| Error::InternalInvariant)
+    })
+}
+
+/// Rotates the active policy to a successor authorized by a signed handoff.
+/// A handoff is accepted only for the current roster digest and exactly the next
+/// epoch. Certificates are reissued by the successor; the old authority private
+/// key is never copied to or recovered by the new leader.
+pub fn secure_store_rotate_authority(
+    handle: u64,
+    successor_seed: &[u8],
+    handoff_bytes: &[u8],
+    now: u64,
+) -> Result<Vec<u8>, Error> {
+    guarded(|| {
+        if successor_seed.len() != 32
+            || handoff_bytes.is_empty()
+            || handoff_bytes.len() > mesh_protocol::MAX_AUTHORITY_HANDOFF
+            || now == 0
+            || now > MAX_LOGICAL_TIME.saturating_sub(GROUP_CERTIFICATE_LIFETIME)
+        {
+            return Err(Error::InvalidArgument);
+        }
+        let handoff =
+            AuthorityHandoff::decode(handoff_bytes).map_err(|_| Error::InvalidArgument)?;
+        let mut seed = zeroize::Zeroizing::new([0; 32]);
+        seed.copy_from_slice(successor_seed);
+        let successor = IdentitySigningKey::import(seed);
+        if successor.public_key() != handoff.next_authority {
+            return Err(Error::InvalidArgument);
+        }
+        let valid_until = now
+            .checked_add(GROUP_CERTIFICATE_LIFETIME)
+            .filter(|until| *until <= MAX_LOGICAL_TIME)
+            .ok_or(Error::InvalidArgument)?;
+        let mut registry = stores().lock().map_err(|_| Error::InternalInvariant)?;
+        let store = registry
+            .stores
+            .get_mut(&handle)
+            .ok_or(Error::InvalidHandle)?;
+        if store.local_member().0 != successor.public_key() {
+            return Err(Error::InvalidArgument);
+        }
+        let active = store
+            .active_policy(now)
+            .map_err(|_| Error::InternalInvariant)?
+            .ok_or(Error::InvalidArgument)?;
+        let current_bundle = store
+            .policy_bundle()
+            .map_err(|_| Error::InternalInvariant)?
+            .ok_or(Error::InternalInvariant)?;
+        let roster = current_bundle
+            .verify(now)
+            .map_err(|_| Error::InternalInvariant)?;
+        let successor_member = MemberId(successor.public_key());
+        if !roster.contains_member(successor_member)
+            || !roster.member_claims().iter().any(|claim| {
+                claim.member == successor_member && claim.signing_key == successor.public_key()
+            })
+        {
+            return Err(Error::InvalidArgument);
+        }
+        handoff
+            .verify_for(active.authority, active.scope, roster.digest(), now)
+            .map_err(|_| Error::InvalidArgument)?;
+        let scope = Scope {
+            group: active.scope.group,
+            epoch: active
+                .scope
+                .epoch
+                .checked_add(1)
+                .ok_or(Error::InvalidArgument)?,
+        };
+        if scope.epoch != handoff.next_epoch {
+            return Err(Error::InvalidArgument);
+        }
+        let mut claims = roster.member_claims();
+        for claim in &mut claims {
+            claim.epoch = scope.epoch;
+            claim.valid_from = now;
+            claim.valid_until = valid_until;
+        }
+        let certificates = claims
+            .iter()
+            .map(|claim| issue_certificate(&successor, claim).map_err(|_| Error::InternalInvariant))
+            .collect::<Result<Vec<_>, _>>()?;
+        store
+            .install_rotated_policy(
+                successor.public_key(),
+                scope,
+                &certificates,
+                &current_bundle.revoked,
+                &handoff,
+                now,
+            )
+            .map_err(|_| Error::InvalidArgument)?;
+        PolicyBundle {
+            authority: successor.public_key(),
+            scope,
+            certificates,
+            revoked: current_bundle.revoked,
+        }
+        .encode()
+        .map_err(|_| Error::InternalInvariant)
+    })
+}
+
 /// Reports whether the supplied local identity is the active policy authority.
 ///
 /// This deliberately returns only a capability bit: callers never receive the
@@ -1757,6 +1914,48 @@ pub fn secure_store_install_policy(
                 now,
             )
             .map_err(|_| Error::InternalInvariant)?
+            .scope
+            .epoch)
+    })
+}
+
+/// Installs a policy signed by a promoted authority only when it is accompanied
+/// by the matching signed handoff from the currently pinned authority. Existing
+/// members use this path to converge on the new epoch without accepting a naked
+/// authority replacement.
+pub fn secure_store_install_rotated_policy(
+    handle: u64,
+    bundle_bytes: &[u8],
+    handoff_bytes: &[u8],
+    now: u64,
+) -> Result<u64, Error> {
+    guarded(|| {
+        if bundle_bytes.is_empty()
+            || bundle_bytes.len() > mesh_protocol::MAX_POLICY_BUNDLE
+            || handoff_bytes.is_empty()
+            || handoff_bytes.len() > mesh_protocol::MAX_AUTHORITY_HANDOFF
+            || now == 0
+        {
+            return Err(Error::InvalidArgument);
+        }
+        let bundle = PolicyBundle::decode(bundle_bytes).map_err(|_| Error::InvalidArgument)?;
+        let handoff =
+            AuthorityHandoff::decode(handoff_bytes).map_err(|_| Error::InvalidArgument)?;
+        let mut registry = stores().lock().map_err(|_| Error::InternalInvariant)?;
+        let store = registry
+            .stores
+            .get_mut(&handle)
+            .ok_or(Error::InvalidHandle)?;
+        Ok(store
+            .install_rotated_policy(
+                bundle.authority,
+                bundle.scope,
+                &bundle.certificates,
+                &bundle.revoked,
+                &handoff,
+                now,
+            )
+            .map_err(|_| Error::InvalidArgument)?
             .scope
             .epoch)
     })
@@ -2923,6 +3122,46 @@ pub unsafe extern "C" fn mesh_secure_store_issue_enrollment(
     status(result, |buffer| unsafe { *out = buffer })
 }
 /// # Safety
+/// `identity_seed` and `successor` reference exactly 32 readable bytes. The
+/// returned handoff is public transport data in a buffer released normally.
+#[no_mangle]
+pub unsafe extern "C" fn mesh_secure_store_prepare_authority_handoff(
+    handle: u64,
+    identity_seed: *const u8,
+    identity_seed_len: usize,
+    successor: *const u8,
+    successor_len: usize,
+    valid_until: u64,
+    now: u64,
+    out: *mut MeshBuffer,
+) -> i32 {
+    if out.is_null() || !(out as usize).is_multiple_of(std::mem::align_of::<MeshBuffer>()) {
+        return Error::InvalidArgument as i32;
+    }
+    unsafe { *out = MeshBuffer::default() };
+    if identity_seed.is_null()
+        || successor.is_null()
+        || identity_seed_len != 32
+        || successor_len != 32
+        || valid_until <= now
+        || now == 0
+    {
+        return Error::InvalidArgument as i32;
+    }
+    let result = guarded(|| {
+        let seed = unsafe { std::slice::from_raw_parts(identity_seed, identity_seed_len) };
+        let successor = unsafe { std::slice::from_raw_parts(successor, successor_len) };
+        let output =
+            secure_store_prepare_authority_handoff(handle, seed, successor, valid_until, now)?
+                .into_boxed_slice();
+        let len = output.len();
+        let ptr = Box::into_raw(output) as *mut u8;
+        Ok(MeshBuffer { ptr, len })
+    });
+    status(result, |buffer| unsafe { *out = buffer })
+}
+
+/// # Safety
 /// `identity_seed` references exactly 32 readable bytes. `out` points to one
 /// writable byte and receives only a capability bit; no key or roster data
 /// crosses this boundary.
@@ -2998,6 +3237,78 @@ pub unsafe extern "C" fn mesh_secure_store_install_policy(
         |epoch| unsafe { *out = epoch },
     )
 }
+/// # Safety
+/// The successor seed has exactly 32 readable bytes. The handoff is bounded
+/// public bytes. `out` receives the public next policy and must be released.
+#[no_mangle]
+pub unsafe extern "C" fn mesh_secure_store_rotate_authority(
+    handle: u64,
+    successor_seed: *const u8,
+    successor_seed_len: usize,
+    handoff: *const u8,
+    handoff_len: usize,
+    now: u64,
+    out: *mut MeshBuffer,
+) -> i32 {
+    if out.is_null() || !(out as usize).is_multiple_of(std::mem::align_of::<MeshBuffer>()) {
+        return Error::InvalidArgument as i32;
+    }
+    unsafe { *out = MeshBuffer::default() };
+    if successor_seed.is_null()
+        || handoff.is_null()
+        || successor_seed_len != 32
+        || handoff_len == 0
+        || handoff_len > mesh_protocol::MAX_AUTHORITY_HANDOFF
+    {
+        return Error::InvalidArgument as i32;
+    }
+    let result = guarded(|| {
+        let seed = unsafe { std::slice::from_raw_parts(successor_seed, successor_seed_len) };
+        let handoff = unsafe { std::slice::from_raw_parts(handoff, handoff_len) };
+        let output = secure_store_rotate_authority(handle, seed, handoff, now)?.into_boxed_slice();
+        let len = output.len();
+        let ptr = Box::into_raw(output) as *mut u8;
+        Ok(MeshBuffer { ptr, len })
+    });
+    status(result, |buffer| unsafe { *out = buffer })
+}
+
+/// # Safety
+/// `bundle` and `handoff` reference bounded readable public bytes. `out` is an
+/// aligned writable u64 and changes only after the rotated policy commits.
+#[no_mangle]
+pub unsafe extern "C" fn mesh_secure_store_install_rotated_policy(
+    handle: u64,
+    bundle: *const u8,
+    bundle_len: usize,
+    handoff: *const u8,
+    handoff_len: usize,
+    now: u64,
+    out: *mut u64,
+) -> i32 {
+    if out.is_null() || !(out as usize).is_multiple_of(std::mem::align_of::<u64>()) {
+        return Error::InvalidArgument as i32;
+    }
+    unsafe { *out = 0 };
+    if bundle.is_null()
+        || handoff.is_null()
+        || bundle_len == 0
+        || bundle_len > mesh_protocol::MAX_POLICY_BUNDLE
+        || handoff_len == 0
+        || handoff_len > mesh_protocol::MAX_AUTHORITY_HANDOFF
+    {
+        return Error::InvalidArgument as i32;
+    }
+    status(
+        guarded(|| {
+            let bundle = unsafe { std::slice::from_raw_parts(bundle, bundle_len) };
+            let handoff = unsafe { std::slice::from_raw_parts(handoff, handoff_len) };
+            secure_store_install_rotated_policy(handle, bundle, handoff, now)
+        }),
+        |epoch| unsafe { *out = epoch },
+    )
+}
+
 /// # Safety
 /// `out` is an aligned writable MeshBuffer. The exported result is public policy
 /// transport only and must be released with mesh_buffer_release exactly once.
@@ -3350,6 +3661,119 @@ mod tests {
         assert_eq!(capability, 0);
         assert_eq!(secure_store_release(handle), Ok(()));
         let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn authority_handoff_rotates_only_to_an_existing_member_and_updates_peers() {
+        let root = std::env::temp_dir().join(format!(
+            "mesh-ffi-authority-handoff-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let owner_seed = [31; 32];
+        let successor_seed = [32; 32];
+        let owner_member = identity_public(&owner_seed).unwrap();
+        let successor_member = identity_public(&successor_seed).unwrap();
+        let owner = secure_store_open(
+            &[33; 32],
+            &owner_member,
+            root.join("owner.db").to_str().unwrap(),
+        )
+        .unwrap();
+        let successor = secure_store_open(
+            &[34; 32],
+            &successor_member,
+            root.join("successor.db").to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            secure_store_create_group(owner, &owner_seed, &[35; 32], &owner_member, 100),
+            Ok(1)
+        );
+        let invitation = secure_store_export_policy(owner, 101).unwrap();
+        let request =
+            create_enrollment_request_from_policy(&successor_seed, &[36; 32], &invitation, 101)
+                .unwrap();
+        let enrolled = secure_store_issue_enrollment(owner, &owner_seed, &request, 101).unwrap();
+        assert_eq!(
+            secure_store_install_policy(successor, &enrolled, 101),
+            Ok(2)
+        );
+
+        assert_eq!(
+            secure_store_prepare_authority_handoff(owner, &owner_seed, &[0x99; 32], 200, 102),
+            Err(Error::InvalidArgument)
+        );
+        let mut handoff_buffer = MeshBuffer::default();
+        unsafe {
+            assert_eq!(
+                mesh_secure_store_prepare_authority_handoff(
+                    owner,
+                    owner_seed.as_ptr(),
+                    owner_seed.len(),
+                    successor_member.as_ptr(),
+                    successor_member.len(),
+                    200,
+                    102,
+                    &mut handoff_buffer,
+                ),
+                0
+            );
+        }
+        let handoff =
+            unsafe { std::slice::from_raw_parts(handoff_buffer.ptr, handoff_buffer.len).to_vec() };
+        unsafe { mesh_buffer_release(handoff_buffer) };
+        assert_eq!(
+            secure_store_rotate_authority(owner, &successor_seed, &handoff, 102),
+            Err(Error::InvalidArgument)
+        );
+        let mut rotated_buffer = MeshBuffer::default();
+        unsafe {
+            assert_eq!(
+                mesh_secure_store_rotate_authority(
+                    successor,
+                    successor_seed.as_ptr(),
+                    successor_seed.len(),
+                    handoff.as_ptr(),
+                    handoff.len(),
+                    102,
+                    &mut rotated_buffer,
+                ),
+                0
+            );
+        }
+        let rotated =
+            unsafe { std::slice::from_raw_parts(rotated_buffer.ptr, rotated_buffer.len).to_vec() };
+        unsafe { mesh_buffer_release(rotated_buffer) };
+        assert_eq!(secure_store_policy_epoch(successor, 102), Ok(3));
+        assert_eq!(
+            secure_store_can_issue_enrollment(successor, &successor_seed, 102),
+            Ok(true)
+        );
+        assert_eq!(
+            secure_store_install_policy(owner, &rotated, 102),
+            Err(Error::InternalInvariant)
+        );
+        let mut epoch = 999;
+        unsafe {
+            assert_eq!(
+                mesh_secure_store_install_rotated_policy(
+                    owner,
+                    rotated.as_ptr(),
+                    rotated.len(),
+                    handoff.as_ptr(),
+                    handoff.len(),
+                    102,
+                    &mut epoch,
+                ),
+                0
+            );
+        }
+        assert_eq!(epoch, 3);
+        assert_eq!(secure_store_policy_epoch(owner, 102), Ok(3));
+        assert_eq!(secure_store_release(owner), Ok(()));
+        assert_eq!(secure_store_release(successor), Ok(()));
+        let _ = std::fs::remove_dir_all(root);
     }
     #[test]
     fn enrollment_advances_the_roster_and_only_the_requested_member_can_install_it() {

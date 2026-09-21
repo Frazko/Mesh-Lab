@@ -1050,6 +1050,57 @@ pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreIssueE
     }
 }
 #[no_mangle]
+pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStorePrepareAuthorityHandoff(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    identity_seed: JByteArray,
+    successor: JByteArray,
+    valid_until: jlong,
+    now: jlong,
+) -> jbyteArray {
+    let result = mesh_ffi_c::guarded(|| {
+        if now <= 0
+            || valid_until <= now
+            || env
+                .get_array_length(&identity_seed)
+                .map_err(|_| mesh_types_error())?
+                != 32
+            || env
+                .get_array_length(&successor)
+                .map_err(|_| mesh_types_error())?
+                != 32
+        {
+            return Err(mesh_types_error());
+        }
+        let identity_seed = zeroize::Zeroizing::new(
+            env.convert_byte_array(&identity_seed)
+                .map_err(|_| mesh_types_error())?,
+        );
+        let successor = env
+            .convert_byte_array(&successor)
+            .map_err(|_| mesh_types_error())?;
+        mesh_ffi_c::secure_store_prepare_authority_handoff(
+            handle as u64,
+            &identity_seed,
+            &successor,
+            valid_until as u64,
+            now as u64,
+        )
+    });
+    match result {
+        Ok(bytes) => env
+            .byte_array_from_slice(&bytes)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(error) => {
+            failure(&mut env, error as i32);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreCanIssueEnrollment(
     mut env: JNIEnv,
     _class: JClass,
@@ -1144,6 +1195,102 @@ pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreInstal
         }
     }
 }
+#[no_mangle]
+pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreRotateAuthority(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    successor_seed: JByteArray,
+    handoff: JByteArray,
+    now: jlong,
+) -> jbyteArray {
+    let result = mesh_ffi_c::guarded(|| {
+        if now <= 0
+            || env
+                .get_array_length(&successor_seed)
+                .map_err(|_| mesh_types_error())?
+                != 32
+        {
+            return Err(mesh_types_error());
+        }
+        let handoff_len = env
+            .get_array_length(&handoff)
+            .map_err(|_| mesh_types_error())?;
+        if !(1..=mesh_protocol::MAX_AUTHORITY_HANDOFF as i32).contains(&handoff_len) {
+            return Err(mesh_types_error());
+        }
+        let successor_seed = zeroize::Zeroizing::new(
+            env.convert_byte_array(&successor_seed)
+                .map_err(|_| mesh_types_error())?,
+        );
+        let handoff = env
+            .convert_byte_array(&handoff)
+            .map_err(|_| mesh_types_error())?;
+        mesh_ffi_c::secure_store_rotate_authority(
+            handle as u64,
+            &successor_seed,
+            &handoff,
+            now as u64,
+        )
+    });
+    match result {
+        Ok(bytes) => env
+            .byte_array_from_slice(&bytes)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(error) => {
+            failure(&mut env, error as i32);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreInstallRotatedPolicy(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    bundle: JByteArray,
+    handoff: JByteArray,
+    now: jlong,
+) -> jlong {
+    let result = mesh_ffi_c::guarded(|| {
+        if now <= 0 {
+            return Err(mesh_types_error());
+        }
+        let bundle_len = env
+            .get_array_length(&bundle)
+            .map_err(|_| mesh_types_error())?;
+        let handoff_len = env
+            .get_array_length(&handoff)
+            .map_err(|_| mesh_types_error())?;
+        if !(1..=mesh_protocol::MAX_POLICY_BUNDLE as i32).contains(&bundle_len)
+            || !(1..=mesh_protocol::MAX_AUTHORITY_HANDOFF as i32).contains(&handoff_len)
+        {
+            return Err(mesh_types_error());
+        }
+        let bundle = env
+            .convert_byte_array(&bundle)
+            .map_err(|_| mesh_types_error())?;
+        let handoff = env
+            .convert_byte_array(&handoff)
+            .map_err(|_| mesh_types_error())?;
+        mesh_ffi_c::secure_store_install_rotated_policy(
+            handle as u64,
+            &bundle,
+            &handoff,
+            now as u64,
+        )
+    });
+    match result {
+        Ok(epoch) => epoch as jlong,
+        Err(error) => {
+            failure(&mut env, error as i32);
+            0
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_frazko_mesh_1host_NativeBridge_secureStoreExportPolicy(
     mut env: JNIEnv,

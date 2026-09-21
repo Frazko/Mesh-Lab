@@ -6,7 +6,7 @@ La tabla inicial conserva la línea base del plan; las secciones fechadas poster
 
 ## C3 — admisión automática gobernada por Convoy
 
-**Actualizado: 2026-09-20. C3 local: 78%; gate operativo: pendiente.** La
+**Actualizado: 2026-09-20. C3 local: 81%; gate operativo: pendiente.** La
 autoridad de producto aprobada es el **líder actual del convoy**: el creador
 comienza como líder y crea la autoridad inicial, pero esa propiedad no queda
 atada de forma permanente a su teléfono. Antes de que el host emita una
@@ -39,10 +39,15 @@ y vencimiento. SQLCipher acepta el cambio sólo si la firma coincide con la
 política activa y el sucesor instala exactamente la época siguiente del mismo
 grupo; una clave nueva sin ese handoff se rechaza. Las pruebas cubren la firma,
 el digest, expiración, manipulación y el rechazo del salto sin autorización.
-Todavía no se expone el handoff por FFI/Pigeon/hosts ni se persiste o distribuye
-por el backend con ACKs. Por eso la admisión de un líder promovido sigue
-bloqueada de forma segura y C3 no se cuenta como cerrada hasta que esa migración
-recorra protocolo, host, backend y prueba física.
+La frontera C/JNI y ambos hosts nativos ahora preparan el handoff, rotan desde
+el almacén local del sucesor y permiten a miembros existentes instalar la nueva
+política solamente con su autorización adjunta. La prueba funcional de FFI abre
+dos bases SQLCipher, incorpora al sucesor, rechaza una clave no miembro y un
+almacén distinto, rota por las funciones C y hace converger al líder anterior.
+Compilan Rust/JNI, Kotlin y Swift. Aún no existe una API Pigeon/SDK, persistencia
+del handoff en Convoy ni scheduler de distribución con ACKs. Por eso la admisión
+de un líder promovido sigue bloqueada de forma segura y C3 no se cuenta como
+cerrada hasta que esa migración recorra producto, backend y prueba física.
 
 ### SEC-05 — separación de grupos de producto
 

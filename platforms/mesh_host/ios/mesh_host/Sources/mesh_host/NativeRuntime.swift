@@ -420,6 +420,27 @@ final class NativeRuntime {
     guard status == 0 else { throw NativeFailure.status(status) }
     return canIssue == 1
   }
+  /// Signs a public, short-lived authority handoff. The successor has to be an
+  /// already certified local group member; private material remains in Keychain.
+  func prepareAuthorityHandoff(_ material: GroupMaterial, successor: [UInt8], validUntil: UInt64) throws -> [UInt8] {
+    dispatchPrecondition(condition: .onQueue(queue))
+    let now = UInt64(Date().timeIntervalSince1970)
+    guard storeHandle != 0 && successor.count == 32 && validUntil > now else { throw NativeFailure.status(1) }
+    var material = material
+    defer { material.wipe() }
+    var buffer = MeshBuffer(ptr: nil, len: 0)
+    let status = material.identitySeed.withUnsafeBytes { identity in
+      successor.withUnsafeBufferPointer { successor in
+        mesh_secure_store_prepare_authority_handoff(
+          storeHandle, identity.bindMemory(to: UInt8.self).baseAddress, identity.count,
+          successor.baseAddress, successor.count, validUntil, now, &buffer
+        )
+      }
+    }
+    defer { mesh_buffer_release(buffer) }
+    guard status == 0, buffer.len <= 512, let pointer = buffer.ptr else { throw NativeFailure.status(status) }
+    return Array(UnsafeBufferPointer(start: pointer, count: buffer.len))
+  }
   func enrollmentRequestMember(_ request: [UInt8]) throws -> [UInt8] {
     dispatchPrecondition(condition: .onQueue(queue))
     guard !request.isEmpty && request.count <= 512 else { throw NativeFailure.status(1) }
@@ -440,6 +461,43 @@ final class NativeRuntime {
     let status = policy.withUnsafeBufferPointer {
       mesh_secure_store_install_policy(storeHandle, $0.baseAddress, $0.count,
                                        UInt64(Date().timeIntervalSince1970), &epoch)
+    }
+    guard status == 0, epoch > 0, epoch <= UInt64(Int64.max) else { throw NativeFailure.status(status) }
+    return Int64(epoch)
+  }
+  /// The promoted member reissues the public policy at the immediate next epoch.
+  func rotateAuthority(_ material: GroupMaterial, handoff: [UInt8]) throws -> [UInt8] {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard storeHandle != 0 && !handoff.isEmpty && handoff.count <= 512 else { throw NativeFailure.status(1) }
+    var material = material
+    defer { material.wipe() }
+    var buffer = MeshBuffer(ptr: nil, len: 0)
+    let status = material.identitySeed.withUnsafeBytes { identity in
+      handoff.withUnsafeBufferPointer { handoff in
+        mesh_secure_store_rotate_authority(
+          storeHandle, identity.bindMemory(to: UInt8.self).baseAddress, identity.count,
+          handoff.baseAddress, handoff.count, UInt64(Date().timeIntervalSince1970), &buffer
+        )
+      }
+    }
+    defer { mesh_buffer_release(buffer) }
+    guard status == 0, buffer.len <= 12 * 1024, let pointer = buffer.ptr else { throw NativeFailure.status(status) }
+    return Array(UnsafeBufferPointer(start: pointer, count: buffer.len))
+  }
+  /// Existing members converge only when the old-authority handoff accompanies
+  /// the new public policy.
+  func installRotatedPolicy(_ policy: [UInt8], handoff: [UInt8]) throws -> Int64 {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard storeHandle != 0 && !policy.isEmpty && policy.count <= 12 * 1024
+      && !handoff.isEmpty && handoff.count <= 512 else { throw NativeFailure.status(1) }
+    var epoch: UInt64 = 0
+    let status = policy.withUnsafeBufferPointer { policy in
+      handoff.withUnsafeBufferPointer { handoff in
+        mesh_secure_store_install_rotated_policy(
+          storeHandle, policy.baseAddress, policy.count, handoff.baseAddress, handoff.count,
+          UInt64(Date().timeIntervalSince1970), &epoch
+        )
+      }
     }
     guard status == 0, epoch > 0, epoch <= UInt64(Int64.max) else { throw NativeFailure.status(status) }
     return Int64(epoch)

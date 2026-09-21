@@ -82,11 +82,23 @@ int32_t mesh_secure_store_issue_enrollment(uint64_t handle, const uint8_t *ident
 int32_t mesh_secure_store_can_issue_enrollment(uint64_t handle, const uint8_t *identity_seed,
                                                size_t identity_seed_len, uint64_t now,
                                                uint8_t *out);
+/* Old authority signs a bounded public handoff to an existing roster member. */
+int32_t mesh_secure_store_prepare_authority_handoff(uint64_t handle, const uint8_t *identity_seed,
+                                                     size_t identity_seed_len, const uint8_t *successor,
+                                                     size_t successor_len, uint64_t valid_until,
+                                                     uint64_t now, MeshBuffer *out);
 /* Validates a public enrollment request and returns only its applicant member ID. */
 int32_t mesh_enrollment_request_member(const uint8_t *request, size_t request_len,
                                        uint64_t now, uint8_t *out);
 int32_t mesh_secure_store_install_policy(uint64_t handle, const uint8_t *bundle,
                                          size_t bundle_len, uint64_t now, uint64_t *out);
+/* New authority builds a next-epoch bundle; existing members install it only with handoff. */
+int32_t mesh_secure_store_rotate_authority(uint64_t handle, const uint8_t *successor_seed,
+                                           size_t successor_seed_len, const uint8_t *handoff,
+                                           size_t handoff_len, uint64_t now, MeshBuffer *out);
+int32_t mesh_secure_store_install_rotated_policy(uint64_t handle, const uint8_t *bundle,
+                                                  size_t bundle_len, const uint8_t *handoff,
+                                                  size_t handoff_len, uint64_t now, uint64_t *out);
 int32_t mesh_secure_store_export_policy(uint64_t handle, uint64_t now, MeshBuffer *out);
 int32_t mesh_create_enrollment_request(const uint8_t *identity_seed, size_t identity_seed_len,
                                        const uint8_t *delivery_seed, size_t delivery_seed_len,

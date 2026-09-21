@@ -111,6 +111,20 @@ internal object NativeRuntime {
             )
         } finally { material.wipe() }
     }
+    /** Produces a public short-lived handoff only from the current authority. */
+    fun prepareAuthorityHandoff(
+        material: SecureIdentity.GroupMaterial,
+        successor: ByteArray,
+        validUntil: Long,
+    ): ByteArray {
+        check(storeHandle != 0L && successor.size == 32) { "SECURE_STORE_UNAVAILABLE" }
+        return try {
+            NativeBridge.secureStorePrepareAuthorityHandoff(
+                storeHandle, material.identitySeed, successor, validUntil,
+                System.currentTimeMillis() / 1000,
+            )
+        } finally { material.wipe() }
+    }
     fun enrollmentRequestMember(request: ByteArray): ByteArray {
         check(request.isNotEmpty() && request.size <= 512) { "MESH_1" }
         val member = NativeBridge.enrollmentRequestMember(request, System.currentTimeMillis() / 1000)
@@ -120,6 +134,21 @@ internal object NativeRuntime {
     fun installPolicy(policy: ByteArray): Long {
         check(storeHandle != 0L) { "SECURE_STORE_UNAVAILABLE" }
         return NativeBridge.secureStoreInstallPolicy(storeHandle, policy, System.currentTimeMillis() / 1000)
+    }
+    /** The promoted device creates the next policy; it cannot receive the old private key. */
+    fun rotateAuthority(material: SecureIdentity.GroupMaterial, handoff: ByteArray): ByteArray {
+        check(storeHandle != 0L && handoff.isNotEmpty() && handoff.size <= 512) { "SECURE_STORE_UNAVAILABLE" }
+        return try {
+            NativeBridge.secureStoreRotateAuthority(
+                storeHandle, material.identitySeed, handoff, System.currentTimeMillis() / 1000,
+            )
+        } finally { material.wipe() }
+    }
+    fun installRotatedPolicy(policy: ByteArray, handoff: ByteArray): Long {
+        check(storeHandle != 0L && policy.isNotEmpty() && handoff.isNotEmpty()) { "SECURE_STORE_UNAVAILABLE" }
+        return NativeBridge.secureStoreInstallRotatedPolicy(
+            storeHandle, policy, handoff, System.currentTimeMillis() / 1000,
+        )
     }
     fun startSession(material: SecureIdentity.GroupMaterial, initiator: Boolean): Long {
         check(storeHandle != 0L) { "SECURE_STORE_UNAVAILABLE" }
