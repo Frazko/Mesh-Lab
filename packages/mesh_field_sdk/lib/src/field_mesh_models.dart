@@ -279,6 +279,11 @@ abstract interface class FieldMeshAuthorityHandoffController {
     DateTime validUntil,
   );
   Future<Uint8List> rotateAuthority(Uint8List handoff);
+
+  /// Re-exports the current, already verified public policy from the protected
+  /// host. This lets a promoted authority recover publication after a network
+  /// interruption without re-running the irreversible rotation.
+  Future<Uint8List> exportCurrentPolicy();
   Future<FieldGroup> installRotatedPolicy(Uint8List policy, Uint8List handoff);
 }
 

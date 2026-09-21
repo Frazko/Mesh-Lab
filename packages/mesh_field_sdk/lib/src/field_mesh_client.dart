@@ -98,6 +98,7 @@ abstract interface class FieldMeshAuthorityHandoffGateway {
     int validUntilSeconds,
   );
   Future<Uint8List> rotateAuthority(Uint8List handoff);
+  Future<Uint8List> exportCurrentPolicy();
   Future<FieldGroup> installRotatedPolicy(Uint8List policy, Uint8List handoff);
 }
 
@@ -176,6 +177,8 @@ final class MeshHostGateway
   @override
   Future<Uint8List> rotateAuthority(Uint8List handoff) =>
       _api.rotateAuthority(handoff);
+  @override
+  Future<Uint8List> exportCurrentPolicy() => _api.exportInvitation();
   @override
   Future<FieldGroup> installRotatedPolicy(
     Uint8List policy,
@@ -398,6 +401,21 @@ final class FieldMeshClient
       );
     }
     final policy = await gateway.rotateAuthority(Uint8List.fromList(handoff));
+    if (policy.isEmpty || policy.length > 12 * 1024) {
+      throw StateError('El host devolvió una política rotada inválida');
+    }
+    return Uint8List.fromList(policy);
+  }
+
+  @override
+  Future<Uint8List> exportCurrentPolicy() async {
+    final gateway = _gateway is FieldMeshAuthorityHandoffGateway
+        ? _gateway as FieldMeshAuthorityHandoffGateway
+        : null;
+    if (gateway == null) {
+      throw UnsupportedError('El host no admite recuperar la política rotada.');
+    }
+    final policy = await gateway.exportCurrentPolicy();
     if (policy.isEmpty || policy.length > 12 * 1024) {
       throw StateError('El host devolvió una política rotada inválida');
     }

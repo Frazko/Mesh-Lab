@@ -33,6 +33,7 @@ class FakeGateway
   Uint8List? rotatedHandoff;
   Uint8List? installedPolicy;
   Uint8List? installedHandoff;
+  Uint8List exportedPolicy = Uint8List.fromList(const [4, 5, 6]);
 
   FieldBluetoothStatus get bluetooth => FieldBluetoothStatus(
     available: available,
@@ -100,6 +101,10 @@ class FakeGateway
     rotatedHandoff = Uint8List.fromList(handoff);
     return Uint8List.fromList(const [4, 5, 6]);
   }
+
+  @override
+  Future<Uint8List> exportCurrentPolicy() async =>
+      Uint8List.fromList(exportedPolicy);
 
   @override
   Future<FieldGroup> installRotatedPolicy(
@@ -402,6 +407,7 @@ void main() {
       final policy = await sdk.rotateAuthority(handoff);
       expect(policy, [4, 5, 6]);
       expect(gateway.rotatedHandoff, handoff);
+      expect(await sdk.exportCurrentPolicy(), policy);
       expect(
         await sdk.installRotatedPolicy(policy, handoff),
         const FieldGroup(configured: true, epoch: 3),
