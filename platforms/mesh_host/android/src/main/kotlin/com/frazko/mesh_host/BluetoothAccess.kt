@@ -98,6 +98,10 @@ internal class BluetoothAccess(
     // mutable “last message” snapshot.
     private val verifiedIncoming = ArrayDeque<CertifiedIncomingText>()
     private val verifiedIncomingVoice = ArrayDeque<CertifiedIncomingVoice>()
+    // Match the bounded durable store rather than discarding certified product
+    // actions during a reconnect burst. GPS is drained by Dart like any other
+    // action, so a tiny FIFO could evict a quick message before the next poll.
+    private val maxVerifiedIncoming = 4096
     // Text travels on the preferred local Wi-Fi link and, while available, the
     // authenticated BLE link as a second encrypted copy.  The small envelope
     // makes that redundancy invisible to the conversation history.
@@ -941,7 +945,7 @@ internal class BluetoothAccess(
                 lastVoiceFile = file
                 lastVoiceDurationMillis = duration
                 receivedVoices++
-                if (verifiedIncomingVoice.size == 64) verifiedIncomingVoice.removeFirst()
+                if (verifiedIncomingVoice.size == maxVerifiedIncoming) verifiedIncomingVoice.removeFirst()
                 verifiedIncomingVoice.addLast(CertifiedIncomingVoice(authorId, objectId, logicalId, verifiedAt, duration, productContext))
             } catch (_: Exception) { return }
             drainDurableReceiptOutbox(); return
@@ -950,7 +954,7 @@ internal class BluetoothAccess(
         messages++
         lastMessage = text
         synchronized(verifiedIncoming) {
-            if (verifiedIncoming.size == 64) verifiedIncoming.removeFirst()
+            if (verifiedIncoming.size == maxVerifiedIncoming) verifiedIncoming.removeFirst()
             verifiedIncoming.addLast(CertifiedIncomingText(authorId, objectId, verifiedAt, text))
         }
         Log.i(logTag, "Certified durable text committed locally")
@@ -1252,9 +1256,17 @@ internal class BluetoothAccess(
         val bytes = text.toByteArray(Charsets.UTF_8)
         val id = decodeLogicalId(logicalId) ?: return false
         if (text.isBlank() || bytes.size > 2048) return false
-        val queued = try { NativeRuntime.enqueueDurableText(identity.groupMaterial(), bytes, id) }
-        catch (_: Exception) { return false }
-        if (queued <= 0) return false
+        val queued = try {
+            NativeRuntime.enqueueDurableText(identity.groupMaterial(), bytes, id)
+        } catch (error: Exception) {
+            Log.e(logTag, "Durable text enqueue rejected: ${error.message}", error)
+            return false
+        }
+        if (queued <= 0) {
+            Log.e(logTag, "Durable text enqueue returned no routed records")
+            return false
+        }
+        Log.i(logTag, "Durable text accepted into $queued routed record(s)")
         // A radio may be temporarily absent. The action is still accepted
         // because its encrypted outbox entry survived first; reconnect drains
         // the same record again rather than creating a second chat item.
@@ -1307,8 +1319,17 @@ internal class BluetoothAccess(
             contextBytes.copyInto(durable, durableVoiceContextHeaderBytes)
         }
         audio.copyInto(durable, headerBytes)
-        val queued = try { NativeRuntime.enqueueDurableText(identity.groupMaterial(), durable, id) } catch (_: Exception) { return false }
-        if (queued <= 0) return false
+        val queued = try {
+            NativeRuntime.enqueueDurableText(identity.groupMaterial(), durable, id)
+        } catch (error: Exception) {
+            Log.e(logTag, "Durable voice enqueue rejected: ${error.message}", error)
+            return false
+        }
+        if (queued <= 0) {
+            Log.e(logTag, "Durable voice enqueue returned no routed records")
+            return false
+        }
+        Log.i(logTag, "Durable voice accepted into $queued routed record(s)")
         drainDurableOriginOutbox()
         return true
     }

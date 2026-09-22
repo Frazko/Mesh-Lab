@@ -40,6 +40,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   // a burst of already-certified durable deliveries into one mutable value.
   private var verifiedIncoming = [CertifiedIncomingText]()
   private var verifiedIncomingVoice = [CertifiedIncomingVoice]()
+  // Keep the native-to-Dart FIFO aligned with the bounded durable store. A
+  // reconnect can legitimately certify more than 64 queued GPS actions before
+  // Flutter's next poll; those must not evict an interactive message.
+  private let maxVerifiedIncoming = 4096
   private var recentTextIds = Set<UInt32>()
   private var recentTextOrder = [UInt32]()
   private var forwardedRelayFrames = [String: [UInt8]]()
@@ -505,7 +509,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
         lastVoiceFile = file
         lastVoiceDurationMillis = duration
         receivedVoices += 1
-        if verifiedIncomingVoice.count == 64 { verifiedIncomingVoice.removeFirst() }
+        if verifiedIncomingVoice.count == maxVerifiedIncoming { verifiedIncomingVoice.removeFirst() }
         verifiedIncomingVoice.append(CertifiedIncomingVoice(authorId: authorId, objectId: objectId, logicalId: logicalId, verifiedAtUnixSeconds: verifiedAt, durationMillis: duration, context: context!))
         _ = drainDurableReceiptOutbox()
       } catch { }
@@ -514,7 +518,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     guard let text = String(bytes: payload, encoding: .utf8) else { return }
     messages += 1
     lastMessage = text
-    if verifiedIncoming.count == 64 { verifiedIncoming.removeFirst() }
+    if verifiedIncoming.count == maxVerifiedIncoming { verifiedIncoming.removeFirst() }
     verifiedIncoming.append(CertifiedIncomingText(authorId: authorId, objectId: objectId, verifiedAtUnixSeconds: verifiedAt, body: text))
     log("Certified durable text committed locally")
     _ = drainDurableReceiptOutbox()

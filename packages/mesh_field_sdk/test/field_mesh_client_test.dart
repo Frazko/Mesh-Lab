@@ -1091,6 +1091,48 @@ void main() {
     },
   );
 
+  test('verified incoming stream preserves every interactive action in a reconnect burst', () async {
+    String envelope(int index) {
+      final logicalId = index.toRadixString(16).padLeft(32, '0');
+      final encoded = base64UrlEncode(
+        utf8.encode(
+          jsonEncode({
+            'id': logicalId,
+            'type': 'text',
+            'body': index == 128 ? 'Espérenme' : 'gps-$index',
+          }),
+        ),
+      );
+      return 'field-action-v1:$encoded';
+    }
+
+    final gateway = FakeGateway()
+      ..verifiedIncoming = List<FieldCertifiedPayload>.generate(
+        256,
+        (index) => FieldCertifiedPayload(
+          authorId: 'a' * 64,
+          objectId: index.toRadixString(16).padLeft(64, '0'),
+          verifiedAt: DateTime.fromMillisecondsSinceEpoch(
+            1700000000000 + index,
+            isUtc: true,
+          ),
+          body: envelope(index),
+        ),
+      );
+    final sdk = FieldMeshClient(gateway: gateway);
+
+    final events = await sdk
+        .watchVerifiedIncomingText(interval: const Duration(milliseconds: 1))
+        .take(256)
+        .toList()
+        .timeout(const Duration(seconds: 1));
+
+    expect(events, hasLength(256));
+    expect(events.map((event) => event.logicalId).toSet(), hasLength(256));
+    expect(events[128].body, 'Espérenme');
+    expect(gateway.verifiedIncoming, isEmpty);
+  });
+
   test('verified incoming stream drops malformed host evidence', () async {
     final gateway = FakeGateway()
       ..verifiedIncoming = [

@@ -151,9 +151,13 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            objects: 128,
-            bytes: 2 * 1024 * 1024,
-            operations: 256,
+            // One active 50-phone field group can retain several bounded
+            // audiences per action. Keep enough encrypted headroom for the
+            // live expiry window; [Store::prune_expired] still enforces a hard
+            // upper bound and removes records once they can no longer route.
+            objects: 4096,
+            bytes: 64 * 1024 * 1024,
+            operations: 8192,
         }
     }
 }
@@ -170,6 +174,95 @@ impl Store {
     /// policy; it is never a secret or a Flutter-visible database row.
     pub fn local_member(&self) -> MemberId {
         self.member
+    }
+
+    /// Deletes objects whose authenticated manifest can no longer be routed.
+    ///
+    /// The cleanup is transactional and runs only while the native store
+    /// registry holds exclusive access. It also removes abandoned operation
+    /// reservations and logical-message shells left by an interrupted enqueue,
+    /// so a process restart cannot permanently exhaust a healthy field group.
+    pub fn prune_expired(&mut self, now: u64) -> Result<usize> {
+        clock(now)?;
+        let expired = {
+            let mut statement = self
+                .db
+                .prepare("SELECT id,manifest FROM objects")
+                .map_err(sql)?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?))
+                })
+                .map_err(sql)?;
+            let mut ids = Vec::new();
+            for row in rows {
+                let (id, encoded) = row.map_err(sql)?;
+                let object = oid(id)?;
+                let manifest = Manifest::decode(&encoded).map_err(|_| DurableError::Corrupt)?;
+                if manifest.id() != object {
+                    return Err(DurableError::Corrupt);
+                }
+                if manifest.expires_at() <= now {
+                    ids.push(object);
+                }
+            }
+            ids
+        };
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(sql)?;
+        for object in &expired {
+            delete_object(&tx, *object)?;
+        }
+        tx.execute(
+            "DELETE FROM logical_messages WHERE expires_at<=?1 OR NOT EXISTS(SELECT 1 FROM logical_message_objects WHERE logical_id=logical_messages.id)",
+            [now as i64],
+        )
+        .map_err(sql)?;
+        tx.execute("DELETE FROM operations WHERE object_id IS NULL", [])
+            .map_err(sql)?;
+        tx.execute(
+            "DELETE FROM relay_receipt_outbox WHERE expires_at<=?1",
+            [now as i64],
+        )
+        .map_err(sql)?;
+        tx.execute(
+            "DELETE FROM relay_receipt_ack_outbox WHERE expires_at<=?1",
+            [now as i64],
+        )
+        .map_err(sql)?;
+        tx.commit().map_err(sql)?;
+        Ok(expired.len())
+    }
+
+    /// Rolls back one enqueue which never became visible to a radio. The host
+    /// calls the radio drain only after the whole logical action succeeds, so
+    /// these objects cannot have left this store yet.
+    pub fn rollback_logical_message(&mut self, logical: LogicalMessageId) -> Result<()> {
+        let objects = self
+            .db
+            .prepare("SELECT object_id FROM logical_message_objects WHERE logical_id=?1")
+            .map_err(sql)?
+            .query_map([&logical.0[..]], |row| row.get::<_, Vec<u8>>(0))
+            .map_err(sql)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql)?
+            .into_iter()
+            .map(oid)
+            .collect::<Result<Vec<_>>>()?;
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(sql)?;
+        for object in objects {
+            delete_object(&tx, object)?;
+        }
+        tx.execute("DELETE FROM logical_messages WHERE id=?1", [&logical.0[..]])
+            .map_err(sql)?;
+        tx.execute("DELETE FROM operations WHERE object_id IS NULL", [])
+            .map_err(sql)?;
+        tx.commit().map_err(sql)
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -901,7 +994,12 @@ impl Store {
         clock(now)?;
         let mut stmt = self
             .db
-            .prepare("SELECT object_id FROM outbox ORDER BY object_id")
+            .prepare(
+                "SELECT q.object_id FROM outbox q \
+                 LEFT JOIN logical_message_objects lmo ON lmo.object_id=q.object_id \
+                 LEFT JOIN logical_messages lm ON lm.id=lmo.logical_id \
+                 ORDER BY coalesce(lm.created_at,0) DESC,q.object_id",
+            )
             .map_err(sql)?;
         let ids = stmt
             .query_map([], |r| r.get::<_, Vec<u8>>(0))
@@ -1729,6 +1827,43 @@ fn logical_object_matches(
         Some((stored, count)) if stored == logical.0 && count == target_count => Ok(()),
         _ => Err(DurableError::Conflict),
     }
+}
+
+fn delete_object(tx: &Transaction<'_>, object: ObjectId) -> Result<()> {
+    let id = &object.0[..];
+    // Delete children explicitly. The initial encrypted schema intentionally
+    // avoided cascading deletes so every retention boundary stays auditable.
+    tx.execute(
+        "DELETE FROM receipt_acknowledgements WHERE object_id=?1",
+        [id],
+    )
+    .map_err(sql)?;
+    tx.execute("DELETE FROM auth_deliveries WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM relay_metadata WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM target_receipts WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM auth_announcements WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute(
+        "DELETE FROM logical_message_objects WHERE object_id=?1",
+        [id],
+    )
+    .map_err(sql)?;
+    tx.execute("DELETE FROM chunks WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM outbox WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM relay_outbox WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM local_deliveries WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM operations WHERE object_id=?1", [id])
+        .map_err(sql)?;
+    tx.execute("DELETE FROM objects WHERE id=?1", [id])
+        .map_err(sql)?;
+    Ok(())
 }
 
 fn manifest_from(db: &Connection, id: ObjectId) -> Result<Manifest> {

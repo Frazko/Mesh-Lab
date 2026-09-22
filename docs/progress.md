@@ -1503,3 +1503,33 @@ perfil de provisión aún no concede Wi‑Fi Aware; el entitlement WFA permanece
 el código. Falta la confirmación física final, con ambos teléfonos dentro de
 `Testing` y sin Internet, de recepción en iPhone del marcador Android, mensaje
 rápido, reacción y audio.
+
+## Prioridad de contenido durante ráfagas de reconexión
+
+**Actualizado: 2026-09-21. Plan completo: 81%; bloque de entrega física por
+Malla: 98%.**
+
+La prueba física confirmó el primer extremo completo: el marcador GPS del
+Android ya aparece en el mapa del iPhone. También aisló la causa de la latencia
+de mensajes rápidos. Durante una interrupción, Convoy creaba una acción durable
+de ubicación cada cinco segundos; al reconectar, el almacén las recorría por ID
+de objeto y los hosts sólo conservaban 64 entregas certificadas para Flutter.
+Una ráfaga extensa podía retrasar el contenido interactivo o expulsarlo antes
+de que el producto lo drenara.
+
+Convoy mantiene ahora una sola ubicación durable pendiente y combina en ella
+los ticks posteriores hasta tener entrega o vencimiento. El almacén sirve
+primero las acciones lógicas más recientes y deja al final únicamente objetos
+heredados sin vínculo lógico. Android e iOS conservan hasta 4096 entregas
+certificadas de texto y voz, el mismo orden de magnitud que el límite durable,
+para que una descarga de reconexión no desplace mensajes, reacciones o audio.
+
+Pasaron **45 pruebas Rust**, **35 pruebas del cliente Flutter del SDK** y **52
+pruebas enfocadas de Convoy**. La suite del SDK incluye una ráfaga de 256
+acciones certificadas y exige que todas lleguen una sola vez, incluido el
+mensaje interactivo situado entre ubicaciones. Las versiones release quedaron
+instaladas en Android e iPhone. En Android, `Espérenme` fue aceptado en la cola
+a las 21:52:29.144 y comenzó su notificación BLE a las 21:52:29.573: 429 ms.
+Queda observarlo en la interfaz receptora y repetir reacción y voz en ambos
+sentidos. El iPhone quedó fuera de la consola de desarrollo al apagar Wi-Fi y
+no estar conectado por USB; este gate físico no aumenta el porcentaje global.

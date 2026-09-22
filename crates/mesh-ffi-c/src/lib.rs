@@ -629,6 +629,9 @@ pub fn secure_store_finalize_next_text(
             .stores
             .get_mut(&handle)
             .ok_or(Error::InvalidHandle)?;
+        store
+            .prune_expired(now)
+            .map_err(|_| Error::InternalInvariant)?;
         let roster = store
             .policy_bundle()
             .map_err(|_| Error::InternalInvariant)?
@@ -728,6 +731,9 @@ fn enqueue_text(
             .stores
             .get_mut(&handle)
             .ok_or(Error::InvalidHandle)?;
+        store
+            .prune_expired(now)
+            .map_err(|_| Error::InternalInvariant)?;
         let roster = store
             .policy_bundle()
             .map_err(|_| Error::InternalInvariant)?
@@ -757,53 +763,78 @@ fn enqueue_text(
             }
         };
         let target_count = members.len().saturating_sub(1);
-        store
-            .begin_logical_message(logical, target_count, audiences.len(), expires_at, now)
-            .map_err(|_| Error::InternalInvariant)?;
-        let mut records: usize = 0;
-        for audience in audiences {
-            let mut operation = [0u8; 16];
-            rng.fill(&mut operation)
-                .map_err(|_| Error::InternalInvariant)?;
-            let mut hash_input = Vec::with_capacity(16 + plaintext.len());
-            hash_input.extend(operation);
-            hash_input.extend(plaintext);
-            let command_hash: [u8; 32] = Sha256::digest(&hash_input).into();
-            let operation = OperationId(operation);
-            let reservation = store
-                .reserve(operation, command_hash)
-                .map_err(|_| Error::InternalInvariant)?;
-            let message = seal_message(
-                SealRequest {
-                    origin: local,
-                    sequence: reservation.sequence,
-                    policy: ObjectPolicy {
-                        namespace: Namespace::new("mesh.chat.text.v1")
-                            .map_err(|_| Error::InternalInvariant)?,
-                        epoch: roster.scope().epoch,
-                        targets: audience,
-                        expires_at,
-                        hop_limit: 16,
-                    },
-                    plaintext,
-                    now,
-                },
-                &roster,
-                &signer,
-                &mut rng,
-            )
-            .map_err(|_| Error::InvalidArgument)?;
-            records = records
-                .checked_add(1 + message.object().chunks().len())
-                .ok_or(Error::ResourcePressure)?;
-            if records > u16::MAX as usize {
-                return Err(Error::ResourcePressure);
+        if let Some(existing) = store
+            .logical_delivery_summary(logical, now)
+            .map_err(|_| Error::InternalInvariant)?
+        {
+            if existing.target_count != target_count || existing.audience_count != audiences.len() {
+                return Err(Error::InvalidArgument);
+            }
+            if existing.committed_audiences == existing.audience_count {
+                // The native outbox already owns this exact logical action.
+                // Report acceptance so a product retry drains it instead of
+                // creating a second encrypted object.
+                return Ok(1);
             }
             store
-                .commit_sealed_logical(operation, command_hash, &message, &roster, logical, now)
+                .rollback_logical_message(logical)
                 .map_err(|_| Error::InternalInvariant)?;
         }
-        u16::try_from(records).map_err(|_| Error::ResourcePressure)
+        let enqueue = (|| {
+            store
+                .begin_logical_message(logical, target_count, audiences.len(), expires_at, now)
+                .map_err(|_| Error::InternalInvariant)?;
+            let mut records: usize = 0;
+            for audience in audiences {
+                let mut operation = [0u8; 16];
+                rng.fill(&mut operation)
+                    .map_err(|_| Error::InternalInvariant)?;
+                let mut hash_input = Vec::with_capacity(16 + plaintext.len());
+                hash_input.extend(operation);
+                hash_input.extend(plaintext);
+                let command_hash: [u8; 32] = Sha256::digest(&hash_input).into();
+                let operation = OperationId(operation);
+                let reservation = store
+                    .reserve(operation, command_hash)
+                    .map_err(|_| Error::InternalInvariant)?;
+                let message = seal_message(
+                    SealRequest {
+                        origin: local,
+                        sequence: reservation.sequence,
+                        policy: ObjectPolicy {
+                            namespace: Namespace::new("mesh.chat.text.v1")
+                                .map_err(|_| Error::InternalInvariant)?,
+                            epoch: roster.scope().epoch,
+                            targets: audience,
+                            expires_at,
+                            hop_limit: 16,
+                        },
+                        plaintext,
+                        now,
+                    },
+                    &roster,
+                    &signer,
+                    &mut rng,
+                )
+                .map_err(|_| Error::InvalidArgument)?;
+                records = records
+                    .checked_add(1 + message.object().chunks().len())
+                    .ok_or(Error::ResourcePressure)?;
+                if records > u16::MAX as usize {
+                    return Err(Error::ResourcePressure);
+                }
+                store
+                    .commit_sealed_logical(operation, command_hash, &message, &roster, logical, now)
+                    .map_err(|_| Error::InternalInvariant)?;
+            }
+            u16::try_from(records).map_err(|_| Error::ResourcePressure)
+        })();
+        if enqueue.is_err() {
+            store
+                .rollback_logical_message(logical)
+                .map_err(|_| Error::InternalInvariant)?;
+        }
+        enqueue
     })
 }
 
@@ -4315,6 +4346,102 @@ mod tests {
         secure_store_release(joiner).unwrap();
         let _ = std::fs::remove_file(owner_path);
         let _ = std::fs::remove_file(joiner_path);
+    }
+    #[test]
+    fn durable_enqueue_prunes_expired_capacity_and_retries_one_logical_action() {
+        let root = std::env::temp_dir().join(format!(
+            "mesh-ffi-durable-retention-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let owner_path = root.with_extension("owner.db");
+        let receiver_path = root.with_extension("receiver.db");
+        let owner_member = identity_public(&[91; 32]).unwrap();
+        let owner =
+            secure_store_open(&[92; 32], &owner_member, owner_path.to_str().unwrap()).unwrap();
+        secure_store_create_group(owner, &[91; 32], &[93; 32], &owner_member, 100).unwrap();
+        let receiver_member = identity_public(&[94; 32]).unwrap();
+        let invitation = secure_store_export_policy(owner, 101).unwrap();
+        let request =
+            create_enrollment_request_from_policy(&[94; 32], &[95; 32], &invitation, 101).unwrap();
+        let bundle = secure_store_issue_enrollment(owner, &[91; 32], &request, 101).unwrap();
+        let receiver =
+            secure_store_open(&[96; 32], &receiver_member, receiver_path.to_str().unwrap())
+                .unwrap();
+        secure_store_install_policy(receiver, &bundle, 101).unwrap();
+
+        let first = [1; 16];
+        let initially_queued = secure_store_enqueue_text_with_logical_id(
+            owner,
+            &[91; 32],
+            b"ubicacion inicial",
+            first,
+            102,
+        )
+        .unwrap();
+        assert!(initially_queued > 0);
+        let before_retry = secure_store_outbox_record(owner, 0, 102).unwrap();
+        assert!(!before_retry.is_empty());
+        assert_eq!(
+            secure_store_enqueue_text_with_logical_id(
+                owner,
+                &[91; 32],
+                b"ubicacion inicial",
+                first,
+                103,
+            ),
+            Ok(1),
+            "a product retry must reuse the durable logical action",
+        );
+        assert_eq!(
+            secure_store_outbox_record(owner, 0, 103).unwrap(),
+            before_retry
+        );
+
+        let prioritized = [3; 16];
+        assert!(
+            secure_store_enqueue_text_with_logical_id(
+                owner,
+                &[91; 32],
+                b"mensaje interactivo actual",
+                prioritized,
+                104,
+            )
+            .unwrap()
+                > 0
+        );
+        let roster = PolicyBundle::decode(&bundle).unwrap().verify(104).unwrap();
+        let newest =
+            RoutedRecord::decode(&secure_store_outbox_record(owner, 0, 104).unwrap()).unwrap();
+        let DurableRecord::Announcement(bytes) = newest.record else {
+            panic!("the first record must announce the newest logical action");
+        };
+        let announcement = mesh_protocol::authenticate_announcement(&bytes, &roster, 104).unwrap();
+        assert_eq!(announcement.manifest().sequence(), 2);
+
+        let second = [2; 16];
+        assert!(
+            secure_store_enqueue_text_with_logical_id(
+                owner,
+                &[91; 32],
+                b"ubicacion actual",
+                second,
+                1003,
+            )
+            .unwrap()
+                > 0
+        );
+        assert!(secure_store_delivery_summary(owner, first, 1003)
+            .unwrap()
+            .is_empty());
+        assert!(!secure_store_delivery_summary(owner, second, 1003)
+            .unwrap()
+            .is_empty());
+
+        secure_store_release(owner).unwrap();
+        secure_store_release(receiver).unwrap();
+        let _ = std::fs::remove_file(owner_path);
+        let _ = std::fs::remove_file(receiver_path);
     }
     #[test]
     fn durable_text_is_visible_only_after_receiver_commit_and_signed_receipt() {
