@@ -1,7 +1,6 @@
 import Foundation
 import MeshEngine
 
-enum NativeFailure: Error { case status(Int32) }
 /// Process-owned diagnostic runtime. The serial queue survives Dart hot restarts.
 final class NativeRuntime {
   static let shared = NativeRuntime()
@@ -248,7 +247,7 @@ final class NativeRuntime {
     guard storeHandle != 0 else { throw NativeFailure.status(3) }
     var material = material
     defer { material.wipe() }
-    return try sessionOutput { output in
+    return try sessionOutput(maximumBytes: NativeOutput.durableDeliveryLimit) { output in
       material.identitySeed.withUnsafeBytes { identity in
         material.deliverySeed.withUnsafeBytes { delivery in
           mesh_secure_store_finalize_next_text(storeHandle,
@@ -536,14 +535,12 @@ final class NativeRuntime {
     guard status == 0, handle != 0 else { throw NativeFailure.status(status) }
     return handle
   }
-  private func sessionOutput(_ work: (UnsafeMutablePointer<MeshBuffer>) -> Int32) throws -> [UInt8] {
+  private func sessionOutput(maximumBytes: Int = NativeOutput.linkRecordLimit,
+                             _ work: (UnsafeMutablePointer<MeshBuffer>) -> Int32) throws -> [UInt8] {
     var buffer = MeshBuffer(ptr: nil, len: 0)
     let status = work(&buffer)
     defer { mesh_buffer_release(buffer) }
-    guard status == 0, buffer.len <= 4163 else { throw NativeFailure.status(status) }
-    guard buffer.len == 0 || buffer.ptr != nil else { throw NativeFailure.status(1) }
-    guard let pointer = buffer.ptr else { return [] }
-    return Array(UnsafeBufferPointer(start: pointer, count: buffer.len))
+    return try NativeOutput.copy(buffer, status: status, maximumBytes: maximumBytes)
   }
   func sessionWrite(_ handle: UInt64) throws -> [UInt8] {
     dispatchPrecondition(condition: .onQueue(queue))

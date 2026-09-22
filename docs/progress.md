@@ -1636,3 +1636,44 @@ CoreDevice confirmó instalación y lanzamiento de iPhone. El entitlement WFA
 del fuente quedó restaurado; el build local iOS usa BLE con el perfil disponible.
 Pendiente: recepción/reproducción física de audio en ambos sentidos sin
 Internet; las pruebas automáticas no cierran ese gate.
+
+### Límite de voz en iOS, notas largas y GPS fuera de orden
+
+**2026-09-22 — Plan completo: 81%; comunicación: 78% estimado.** El usuario
+confirmó audio iPhone→Android, con fallo aparente por encima de ocho segundos;
+Android→iPhone seguía sin audio y el punto GPS de Android aparecía amarillo.
+Android registró voces recibidas de 31–47 KiB y notas propias aceptadas de
+9–19 KiB. Esto permite separar recepción real de mera aceptación en cola.
+
+Causa confirmada en el host iOS: `finalizeNextDurableText` utilizaba el límite
+de 4163 bytes de un fragmento también para el objeto de voz reconstruido.
+Rust ya había confirmado la entrega cuando Swift descartaba el resultado.
+Ahora esa llamada acepta 48 KiB más el encabezado y recibo, manteniendo
+estricto el límite de cada trama de radio. Las pruebas de la frontera Swift
+incluyen 4163/4164 bytes, 19 KiB y 48 KiB más metadatos, búferes inválidos y
+estado de error. Cobertura del nuevo `NativeOutput`: 100% de líneas/regiones.
+
+Se reprodujo localmente el relleno de un contenedor AAC de Apple: un tono
+sintético de diez segundos pasó de 31 441 a 8 428 bytes al retirar `free` y
+reubicar `stco`/`co64`. `afconvert` produjo WAV idénticos antes y después
+(SHA-256 idéntico): no se recodifica ni se reduce calidad. Convoy compacta sólo
+contenedores ordinarios reconocidos; diseños desconocidos o malformados quedan
+intactos. También se corrige el redondeo del temporizador: una parada a
+10 001 ms ya no etiqueta la nota como once segundos y provoca su rechazo.
+
+La actualización de GPS descarta muestras anteriores a la ya mostrada, para
+que reenvíos de Malla o recuperación por Internet no hagan retroceder el punto.
+No convierte una ubicación realmente antigua en fresca. Se conserva amarillo
+después de cinco minutos y gris después de diez; queda comprobar físicamente
+la renovación continua de GPS del Android en el iPhone.
+
+Validación: 24 pruebas Flutter de compactación, grabación, marcador y recepción
+autorizada; la prueba integrada de GPS también verifica replay fuera de orden.
+Compactador: 100% de líneas medidas. Suite Swift nativa aprobada, con nueva
+frontera de entrega y límites de radio conservados. Analizador sin incidencias
+en los cinco archivos revisados. Builds release compilados e instalados en
+ambos teléfonos; Android se recuperó por mDNS en el puerto 46217 e iPhone
+confirmó instalación a las 07:53. Pendiente repetir audios NUEVOS de 3 y
+9–10 segundos en ambas direcciones. Las notas que el iPhone
+ya descartó tras confirmar en Rust no validan una retransmisión de la versión
+corregida.

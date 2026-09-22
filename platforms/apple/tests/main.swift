@@ -1,5 +1,32 @@
 import Foundation
 
+// Exercise the actual Swift FFI copy boundary, not merely fragmentation.
+// Before the fix Rust committed these notes, then Swift threw them away at
+// the 4163-byte link limit and the durable store would not emit them again.
+for size in [0, 4163, 4164, 19 * 1024, 48 * 1024 + 1102, NativeOutput.durableDeliveryLimit] {
+  var payload = (0..<size).map { UInt8(truncatingIfNeeded: $0) }
+  try payload.withUnsafeMutableBufferPointer { pointer in
+    let buffer = MeshBuffer(ptr: pointer.baseAddress, len: size)
+    let result = try NativeOutput.copy(buffer, status: 0, maximumBytes: NativeOutput.durableDeliveryLimit)
+    assert(result.count == size && result.enumerated().allSatisfy { $0.element == UInt8(truncatingIfNeeded: $0.offset) })
+    if size > NativeOutput.linkRecordLimit {
+      do {
+        _ = try NativeOutput.copy(buffer, status: 0, maximumBytes: NativeOutput.linkRecordLimit)
+        assertionFailure("Wire limits must remain bounded")
+      } catch NativeFailure.status(let code) { assert(code == 1) }
+    }
+  }
+}
+for (size, status) in [(NativeOutput.durableDeliveryLimit + 1, Int32(0)), (1, 0), (0, 3)] {
+  do {
+    _ = try NativeOutput.copy(MeshBuffer(ptr: nil, len: size), status: status, maximumBytes: NativeOutput.durableDeliveryLimit)
+    assertionFailure("Invalid native output accepted")
+  } catch NativeFailure.status(let code) { assert(code != 0) }
+}
+let emptyNativeOutput = try NativeOutput.copy(MeshBuffer(ptr: nil, len: 0), status: 0, maximumBytes: NativeOutput.durableDeliveryLimit)
+assert(emptyNativeOutput.isEmpty)
+print("PASS: Swift full durable voice delivery boundary, strict link cap and invalid buffers")
+
 // Exercise the same write queue used by CoreBluetooth with a delayed ATT
 // completion and a new product action arriving while the radio is busy.
 let attQueue = BleWriteQueue()
