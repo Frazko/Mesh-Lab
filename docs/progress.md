@@ -1445,3 +1445,20 @@ retiró únicamente durante la firma del artefacto iOS local porque el perfil de
 provisión todavía no lo concede. Queda instalar en dispositivos y validar la
 sensación del movimiento a 60/120 Hz: no había Android visible por ADB y el
 iPhone aparecía no disponible al cerrar esta revisión física.
+
+## Frescura de la última ubicación GPS en Convoy
+
+**Actualizado: 2026-09-21. Plan completo: 81%; bloque de frescura GPS: 75%.**
+
+El punto del marcador usa ahora intervalos de cinco minutos y una sola regla
+compartida por el dominio y la pantalla en vivo: verde hasta cinco minutos,
+amarillo después de cinco y hasta diez minutos, y gris después de diez
+minutos. Los límites exactos conservan el tramo anterior: a los 5:00 sigue
+verde y a los 10:00 sigue amarillo; el cambio ocurre al superar cada límite.
+La antigüedad describe únicamente la última ubicación GPS y no el transporte
+Internet/Malla disponible para comunicarse con el participante.
+
+Pasaron 21 pruebas de frescura, tratamiento visual, colores del punto, cámara y
+marcadores. Se cubren los límites de cinco y diez minutos y el mapeo real a
+verde, amarillo y gris. Queda generar los artefactos release e instalar en los
+teléfonos para comprobar el cambio temporal en una sesión real.
