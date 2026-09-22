@@ -1,6 +1,6 @@
 # Avance del plan
 
-Estado vigente: 2026-09-21. **80% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-22. **81% global estimado · 90% Wi‑Fi Aware · 78% comunicación.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
 
@@ -1677,3 +1677,59 @@ confirmó instalación a las 07:53. Pendiente repetir audios NUEVOS de 3 y
 9–10 segundos en ambas direcciones. Las notas que el iPhone
 ya descartó tras confirmar en Rust no validan una retransmisión de la versión
 corregida.
+
+
+### Feedback de radio, audios en cola y pantalla activa
+
+**2026-09-22 — Plan completo: 81%; comunicación: 78% estimado.** El usuario
+confirma que los audios llegan bien sin Internet usando sólo Malla. Esta
+confirmación se registra como evidencia física de entrega; no certifica por
+sí sola todas las duraciones, tres emisores físicos, multihop ni background.
+Se conservan los porcentajes hasta cerrar esos escenarios y la revisión visual.
+
+El indicador previo dependía de `isRecording`, difundido por Internet. La
+reproducción nativa de una voz certificada de Malla no activaba ese estado.
+Ahora el receptor publica el audio que está reproduciendo por convoy, después
+de que el host confirma el inicio. La vista superpone el micrófono al marcador
+y muestra el nombre del remitente; el aviso permanece visible hasta terminar.
+El estado es local de presentación, no modifica el roster ni la frescura GPS.
+Internet utiliza el mismo feedback después de cargar la voz y el sonido previo.
+Fallos de carga no anuncian un hablante y la finalización limpia el aviso.
+
+La cola común ya serializaba recepción Internet/Malla. Una nueva prueba
+funcional de widgets inyecta tres remitentes simultáneos y un duplicado:
+comprueba el orden de reproducción, un nombre a la vez, micrófonos, duración
+visible y desaparición al finalizar. Se mantiene el orden local de recepción;
+no se promete un orden idéntico de audios entre teléfonos con latencias distintas.
+Malla conserva la espera por duración certificada porque el host actual
+confirma inicio, no expone un evento de finalización al receptor Flutter.
+
+La vista Convoy activa `wakelock_plus` al entrar, lo reafirma al volver a primer
+plano y libera su solicitud al salir. Un servicio compartido conserva las
+solicitudes de grabación de rutas: terminar una función no desactiva el bloqueo
+requerido por la otra. Las llamadas nativas se serializan para entradas/salidas
+rápidas. Esto evita el apagado automático con Convoy abierto; no impide bloquear
+manualmente el teléfono ni constituye soporte nuevo de ejecución en background.
+
+Validación: 30 pruebas Flutter aprobadas (recepción, cola, feedback funcional,
+fallos/mute/duplicados, wake lock compartido y controlador real de grabación
+de rutas). Cobertura diferencial de líneas instrumentadas: 48/53 (90,57%);
+quedan sin cubrir automáticamente cuatro puntos de conexión en la pantalla
+completa y una línea preexistente reformateada del reproductor. LCOV guardado
+en `/tmp/convoy-radio-feedback-lcov.info`. Cobertura de líneas del aviso
+42/42 y del servicio de pantalla 11/11; las nuevas líneas de estado de
+reproducción están cubiertas. Análisis de los archivos revisados sin errores
+ni warnings, con recomendaciones de estilo. iOS release compiló (52 s) y se instaló con éxito por CoreDevice a las 08:26,
+con el perfil local BLE habitual; el entitlement WFA del fuente quedó restaurado.
+Android release compiló (40,3 s) y ADB confirmó instalación USB en el A73.
+Ambas versiones release están instaladas; queda revisión física del feedback
+y del bloqueo de pantalla. Código de Convoy: `d943cd9`. La primera compilación Android encontró
+metadata.bin ausente en la caché Gradle. El directorio de caché ya no existía,
+pero el daemon seguía referenciándolo; se reinició el daemon inactivo para
+regenerarla sin cambiar las dependencias del proyecto.
+
+La reconstrucción Android también detectó que el registro generado de plugins
+había incorporado dependencias de pruebas mientras Gradle compilaba release.
+Se finalizaron todas las pruebas y se inició una nueva compilación release
+secuencial, regenerando el registro sin esos plugins de desarrollo. No se
+modificaron dependencias ni versiones para resolverlo.
