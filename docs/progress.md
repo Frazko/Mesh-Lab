@@ -1403,3 +1403,23 @@ del artefacto iOS local porque el perfil de provisión todavía no lo concede.
 Android no estaba visible por ADB y su APK actualizado quedó pendiente de
 instalación. No se aumenta el porcentaje global hasta repetir texto/voz en dos
 teléfonos sin Internet y ejecutar la validación física posterior de GPS.
+
+## Presencia visual híbrida en el mapa de Convoy
+
+**Actualizado: 2026-09-21. Plan completo: 81%; bloque de presencia visual:
+70%.**
+
+La pantalla aplicaba blanco y negro a todos los participantes cuando fallaba el
+probe de Internet, incluso con una sesión Malla autenticada. El mapa ahora
+considera utilizables ambos caminos: conserva las fotos a color si existe ruta
+por Internet o por Malla y fuerza el tratamiento desconectado sólo cuando
+faltan las dos. El punto del marcador mantiene una función distinta y útil:
+verde, amarillo o gris según la antigüedad de la última ubicación recibida; no
+pretende identificar el transporte.
+
+Pasaron 14 pruebas de cámara y marcadores, incluida la tabla de verdad para
+Internet, Malla, ambos y ninguna ruta. Sigue pendiente exponer al producto la
+presencia firmada por miembro. El estado Malla actual es agregado para este
+teléfono y no permite afirmar cuál de hasta 50 participantes es alcanzable de
+forma directa o mediante saltos; esa distinción requiere un contrato SDK por
+participante y su TTL antes de convertirla en UI individual.
