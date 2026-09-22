@@ -1811,3 +1811,39 @@ Android Release compiló en 54,7 s e iOS Release en 51,5 s. Ambas versiones
 quedaron instaladas; Android volvió a Testing. iOS usa el perfil local BLE y
 el entitlement WFA del fuente quedó restaurado. No se instaló Debug. Falta
 revisión visual del usuario con mensajes y reacciones en los dispositivos.
+
+
+## 2026-09-22 — Confirmación del usuario y pendientes de cierre
+
+**81% global estimado · 78% comunicación; porcentajes sin cambio.**
+Tras instalar el ajuste visual, el usuario confirma: «todo está funcionando
+bien». Se registra como aceptación funcional del uso actual con los dos
+teléfonos y del ajuste visual reciente. Las confirmaciones anteriores incluyen
+mensajes rápidos, voz sin Internet y funcionamiento aparente de GPS. No implica
+una campaña medida de background, 50 radios, WFA iPhone↔iPhone ni todos los
+ciclos de reconexión/reinicio.
+
+Pendientes priorizados para completar el plan:
+
+1. Validar tres teléfonos y saltos reales A→B→C sin enlace directo A↔C;
+   incluir texto, voz, GPS, cortes, recibos y ausencia de duplicados.
+2. Cerrar continuidad al reiniciar sin Internet y la matriz de recuperación:
+   cambios de radio, pérdida de alcance, regreso y cola durante el corte.
+3. Completar y validar background/pantalla bloqueada y consumo. Mantener la
+   pantalla encendida en primer plano no cierra este requisito.
+4. Cerrar la pasarela de un miembro sin Internet mediante otro con cobertura.
+   La sección Pasarela certificada Convoy → Internet documenta código local de
+   texto, despliegue/E2E pendientes y relevo de voz/GPS aún por extender.
+5. Completar los huecos de ejecución de sustitución de vecinos, selección de
+   transporte por objeto y presencia propagada; validar grupos 5/10/50.
+6. Certificar WFA entre iPhones con otro equipo compatible y firma adecuada;
+   repetir la regresión WFA Android↔Android en Convoy actualizado.
+7. Cerrar diagnóstico/exportación, cobertura de callbacks nativos y pruebas de
+   aislamiento/cambio de convoy, membresía y liderazgo bajo cortes. La auditoría
+   independiente sigue pendiente para el cierre de seguridad del SDK.
+
+El registro known-gaps.md contiene estados históricos que fueron superados por
+las secciones más recientes de este archivo y por las pruebas en Convoy: no
+volver a presentar la inscripción remota o la voz bilateral como no implementadas.
+Siguiente paso recomendado: campaña reproducible de tres teléfonos para comprobar
+el salto y la convivencia Internet/Malla, antes de ampliar carga o radios.

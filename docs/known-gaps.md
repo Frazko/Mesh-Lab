@@ -8,6 +8,12 @@ realizadas descubiertos durante el laboratorio. Un elemento se cierra solo con
 la evidencia indicada; compilar, descubrir un radio o mostrar un semáforo no
 cuenta como cierre de una conexión segura.
 
+> Nota de vigencia (2026-09-22): varias filas conservan estados históricos.
+> Para la aceptación actual de Convoy y los pendientes priorizados, consultar
+> la sección «Confirmación del usuario y pendientes de cierre» de
+> [progress.md](progress.md). La inscripción remota y la voz bilateral en
+> Convoy ya avanzaron respecto de este registro.
+
 ## Lectura del estado
 
 | Marca | Significado |
