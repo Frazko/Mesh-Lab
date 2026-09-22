@@ -50,12 +50,13 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private let maxDurableRelaySlots = 65
   private let maxDurableOriginSlots = 520
   private final class SessionLink { let handle: UInt64; let initiator: Bool; var stage: Int = 0; var originOutboxDrained = false
+    let durableHistory = DurableRecordHistory()
     init(_ handle: UInt64, initiator: Bool) { self.handle = handle; self.initiator = initiator }
   }
   private var clientSessions = [UUID: SessionLink]()
   private var serverSessions = [UUID: SessionLink]()
-  private var clientWrites = [UUID: [[UInt8]]]()
-  private var serverWrites = [UUID: [[UInt8]]]()
+  private var clientWrites = [UUID: BleWriteQueue]()
+  private var serverWrites = [UUID: BleWriteQueue]()
   private var inbound = [String: BleFrameCodec.Assembler]()
   private var subscribers = [UUID: CBCentral]()
   private var txCharacteristic: CBMutableCharacteristic?
@@ -591,6 +592,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     guard runtime({ try NativeRuntime.shared.sessionAuthenticated(link.handle) }) == true else { return nil }
     var frames = [[UInt8]]()
     for record in records {
+      guard link.durableHistory.admit(record) else { continue }
       guard let frame = runtime({ try NativeRuntime.shared.sessionSend(link.handle, bytes: record) }) else { return nil }
       frames.append(frame)
     }
@@ -865,16 +867,24 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
        payloads.allSatisfy({ awarePayloadSender($0) }) {
       return true
     }
-    guard let pair = clientSessions.first(where: { pair in
-      runtime { try NativeRuntime.shared.sessionAuthenticated(pair.value.handle) } == true
-    }), let peer = connected[pair.key] else { return false }
-    var frames = [[UInt8]]()
-    for payload in payloads {
-      guard let frame = runtime({ try NativeRuntime.shared.sessionSend(pair.value.handle, bytes: payload) }) else { return false }
-      frames.append(frame)
+    var accepted = false
+    for (id, link) in clientSessions {
+      guard let peer = connected[id],
+            runtime({ try NativeRuntime.shared.sessionAuthenticated(link.handle) }) == true else { continue }
+      link.durableHistory.enqueue(payloads)
+      if clientWrites[id] == nil { clientWrites[id] = BleWriteQueue() }
+      pumpClient(peer)
+      accepted = true
     }
-    enqueueClient(peer, raw: frames)
-    return true
+    for (id, link) in serverSessions {
+      guard let peer = subscribers[id],
+            runtime({ try NativeRuntime.shared.sessionAuthenticated(link.handle) }) == true else { continue }
+      link.durableHistory.enqueue(payloads)
+      if serverWrites[id] == nil { serverWrites[id] = BleWriteQueue() }
+      pumpServer(peer)
+      accepted = true
+    }
+    return accepted
   }
 
   /// Consumes only valid voice envelopes. Invalid binary data is left out of text history.
@@ -932,26 +942,49 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   }
   private func enqueueClient(_ peripheral: CBPeripheral, raw: [[UInt8]]) {
     let maximum = peripheral.maximumWriteValueLength(for: .withResponse)
-    var queue = clientWrites[peripheral.identifier, default: []]
-    for value in raw { guard let framed = runtime({ try NativeRuntime.shared.linkEncode(value) }), let parts = BleFrameCodec.split(framed, maximumWrite: maximum) else { return }; queue += parts }
+    let queue = clientWrites[peripheral.identifier] ?? BleWriteQueue()
+    for value in raw { guard let framed = runtime({ try NativeRuntime.shared.linkEncode(value) }), let parts = BleFrameCodec.split(framed, maximumWrite: maximum) else { closeClient(peripheral); return }; queue.append(parts) }
     clientWrites[peripheral.identifier] = queue; pumpClient(peripheral)
   }
   private func pumpClient(_ peripheral: CBPeripheral) {
-    guard var queue = clientWrites[peripheral.identifier], !queue.isEmpty,
+    guard let queue = clientWrites[peripheral.identifier],
           let service = peripheral.services?.first(where: { $0.uuid == serviceUUID }),
           let rx = service.characteristics?.first(where: { $0.uuid == rxUUID }) else { return }
-    let next = queue.removeFirst(); clientWrites[peripheral.identifier] = queue
+    if queue.idle {
+      guard let link = clientSessions[peripheral.identifier], let payload = link.durableHistory.next() else { return }
+      guard let encrypted = runtime({ try NativeRuntime.shared.sessionSend(link.handle, bytes: payload) }),
+            let framed = runtime({ try NativeRuntime.shared.linkEncode(encrypted) }),
+            let parts = BleFrameCodec.split(framed, maximumWrite: peripheral.maximumWriteValueLength(for: .withResponse)) else { closeClient(peripheral); return }
+      queue.append(parts)
+    }
+    guard let next = queue.begin() else { return }
     peripheral.writeValue(Data(next), for: rx, type: .withResponse)
   }
   private func enqueueServer(_ central: CBCentral, raw: [[UInt8]]) {
-    var queue = serverWrites[central.identifier, default: []]
-    for value in raw { guard let framed = runtime({ try NativeRuntime.shared.linkEncode(value) }), let parts = BleFrameCodec.split(framed, maximumWrite: 185) else { return }; queue += parts }
+    let queue = serverWrites[central.identifier] ?? BleWriteQueue()
+    for value in raw { guard let framed = runtime({ try NativeRuntime.shared.linkEncode(value) }), let parts = BleFrameCodec.split(framed, maximumWrite: central.maximumUpdateValueLength) else { closeServer(central.identifier); return }; queue.append(parts) }
     serverWrites[central.identifier] = queue; pumpServer(central)
   }
   private func pumpServer(_ central: CBCentral) {
-    guard var queue = serverWrites[central.identifier], !queue.isEmpty, let tx = txCharacteristic else { return }
-    let next = queue.removeFirst()
-    if peripheral?.updateValue(Data(next), for: tx, onSubscribedCentrals: [central]) == true { serverWrites[central.identifier] = queue }
+    guard let queue = serverWrites[central.identifier], let tx = txCharacteristic else { return }
+    // CoreBluetooth only calls ready-to-update after updateValue returns false.
+    // A successful notification has no completion callback: continue pumping.
+    while true {
+      if queue.idle {
+        guard let link = serverSessions[central.identifier], let payload = link.durableHistory.next() else { return }
+        guard let encrypted = runtime({ try NativeRuntime.shared.sessionSend(link.handle, bytes: payload) }),
+              let framed = runtime({ try NativeRuntime.shared.linkEncode(encrypted) }),
+              let parts = BleFrameCodec.split(framed, maximumWrite: central.maximumUpdateValueLength) else { closeServer(central.identifier); return }
+        queue.append(parts)
+      }
+      guard let next = queue.begin() else { return }
+      if peripheral?.updateValue(Data(next), for: tx, onSubscribedCentrals: [central]) == true {
+        queue.complete()
+      } else {
+        queue.refused()
+        return
+      }
+    }
   }
   private func closeClient(_ peripheral: CBPeripheral) { if let link = clientSessions.removeValue(forKey: peripheral.identifier) { runtime { NativeRuntime.shared.releaseSession(link.handle) } }; clientWrites.removeValue(forKey: peripheral.identifier); inbound.removeValue(forKey: "c:\(peripheral.identifier.uuidString)"); central?.cancelPeripheralConnection(peripheral) }
   private func closeServer(_ id: UUID) { if let link = serverSessions.removeValue(forKey: id) { runtime { NativeRuntime.shared.releaseSession(link.handle) } }; serverWrites.removeValue(forKey: id); inbound.removeValue(forKey: "s:\(id.uuidString)") }
@@ -1056,7 +1089,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,
                   error: Error?) {
-    if error == nil, characteristic.uuid == rxUUID { pumpClient(peripheral) } else { closeClient(peripheral) }
+    if error == nil, characteristic.uuid == rxUUID {
+      clientWrites[peripheral.identifier]?.complete()
+      pumpClient(peripheral)
+    } else { closeClient(peripheral) }
   }
 
   func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {

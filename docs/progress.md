@@ -1533,3 +1533,49 @@ a las 21:52:29.144 y comenzó su notificación BLE a las 21:52:29.573: 429 ms.
 Queda observarlo en la interfaz receptora y repetir reacción y voz en ambos
 sentidos. El iPhone quedó fuera de la consola de desarrollo al apagar Wi-Fi y
 no estar conectado por USB; este gate físico no aumenta el porcentaje global.
+
+## Corrección de colas BLE, voz fragmentada y cadencia GPS
+
+**Actualizado: 2026-09-22. Plan completo: 81%; bloque de entrega por Malla:
+90% estimado, reabierto tras el fallo físico.** El 98% anterior no acreditaba
+recepción ni latencia extremo a extremo. Los 429 ms anteriores medían la
+aceptación de una notificación para envío; no demostraban entrega completa.
+
+La inspección encontró escrituras ATT concurrentes al añadir nuevas acciones,
+reinyección de todo el outbox en cada envío y una bomba periférica iOS que
+enviaba sólo un fragmento aunque CoreBluetooth hubiera aceptado más. Además,
+el origen iOS sólo seleccionaba el primer enlace cliente BLE y omitía enlaces
+en los que actuaba como periférico. Esto explica mecanismos de bloqueo y
+congestión; su resolución física permanece pendiente de medir.
+
+Los dos hosts usan ahora una cola con un único fragmento ATT en vuelo. iOS
+periférico continúa hasta que CoreBluetooth indica saturación, conserva el
+fragmento rechazado y lo retoma cuando recibe disponibilidad. Android cierra
+un transporte fallido para recuperar desde el almacén durable en una conexión
+nueva, en lugar de descartar silenciosamente sus fragmentos. La cola por
+sesión evita reinsertar registros durables ya programados, permite el replay
+tras reconectar y pone acciones nuevas delante de la cola pendiente antes de
+asignar contadores Noise. No reordena fragmentos ni ciphertext ya generado.
+
+Convoy limita GPS por malla a una emisión cada **seis segundos**. Cuando una
+ubicación ya fue recibida por algún participante, permite publicar la actual
+sin esperar a todos los miembros desconectados; conserva la contrapresión si
+todavía no hay ninguna entrega. Internet conserva su cadencia independiente.
+
+Validación: **45 pruebas Rust**, con voz durable ampliada a **47 KiB**;
+**13 pruebas Kotlin/JNI**; suite Swift nativa con fragmentación de 48 KiB,
+backpressure, nuevas acciones durante escritura en vuelo, cola de 520 registros,
+prioridad frente a 100 pendientes y reconstrucción de sesión; **53 pruebas de
+Convoy** de contenido, recepción, outbox y GPS. Cobertura medida de líneas:
+**100%** en las clases nuevas `BleWriteQueue`/`DurableRecordHistory` Kotlin
+(JaCoCo) y Swift (llvm-cov), y **96,2%** en el mirror GPS (Flutter). No es la
+cobertura de todo el adaptador nativo ni sustituye las pruebas con radio.
+
+Ambos builds release compilaron y se instalaron; Android se recuperó por mDNS
+en `192.168.100.171:42833` y abrió `Testing` con GPS activo. El iPhone se instaló
+y abrió correctamente antes de perder acceso de consola. El entitlement WFA
+del fuente permanece intacto; el artefacto iOS local sigue usando BLE por el
+perfil de provisión disponible. Pendiente: verificar ambos sentidos sin salida
+a Internet, medir aceptación → recepción certificada → UI para mensajes cortos,
+reproducir audio recibido, confirmar GPS renovado y repetir con reconexión.
+No se aprueba el gate físico ni se eleva el avance global por estas pruebas locales.

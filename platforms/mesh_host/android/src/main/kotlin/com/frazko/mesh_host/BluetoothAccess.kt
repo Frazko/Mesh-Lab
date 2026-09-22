@@ -125,8 +125,8 @@ internal class BluetoothAccess(
     private val policyAssemblies = mutableMapOf<String, PolicyAssembly>()
     private val clientSessions = mutableMapOf<BluetoothGatt, SessionLink>()
     private val serverSessions = mutableMapOf<String, SessionLink>()
-    private val clientWrites = mutableMapOf<BluetoothGatt, ArrayDeque<ByteArray>>()
-    private val serverWrites = mutableMapOf<String, ArrayDeque<ByteArray>>()
+    private val clientWrites = mutableMapOf<BluetoothGatt, BleWriteQueue>()
+    private val serverWrites = mutableMapOf<String, BleWriteQueue>()
     private val inbound = mutableMapOf<String, BleFrameCodec.Assembler>()
     private var enrollmentDetail = ""
     // `null` preserves the laboratory's explicit open-enrollment mode. Product
@@ -189,6 +189,7 @@ internal class BluetoothAccess(
         var lastHeartbeatAck: Int = Int.MIN_VALUE,
         var presenceAnnounced: Boolean = false,
         var originOutboxDrained: Boolean = false,
+        val durableHistory: DurableRecordHistory = DurableRecordHistory(),
     )
 
     private data class AwarePeer(
@@ -346,6 +347,7 @@ internal class BluetoothAccess(
                 if (!NativeRuntime.sessionAuthenticated(link.handle)) return@synchronized
                 try {
                     for (payload in payloads) {
+                        if (!link.durableHistory.admit(payload)) continue
                         if (!awareWrite(peer, NativeRuntime.sessionSend(link.handle, payload))) return@synchronized
                     }
                 } catch (error: Exception) {
@@ -593,7 +595,7 @@ internal class BluetoothAccess(
             if (descriptor.uuid == clientConfigUuid && value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
                 synchronized(this@BluetoothAccess) {
                     Log.i(logTag, "Notifications enabled by ${device.address}")
-                    serverWrites.putIfAbsent(device.address, ArrayDeque())
+                    serverWrites.putIfAbsent(device.address, BleWriteQueue())
                 }
             }
             if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
@@ -601,6 +603,12 @@ internal class BluetoothAccess(
         override fun onNotificationSent(device: android.bluetooth.BluetoothDevice, status: Int) {
             synchronized(this@BluetoothAccess) {
                 Log.i(logTag, "Notification sent to ${device.address}: $status")
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    closeServer(device.address)
+                    gattServer?.cancelConnection(device)
+                    return
+                }
+                serverWrites[device.address]?.complete()
                 pumpServer(device)
             }
         }
@@ -635,7 +643,11 @@ internal class BluetoothAccess(
             if (characteristic.uuid == txUuid) synchronized(this@BluetoothAccess) { receiveFromClient(gatt, value) }
         }
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            synchronized(this@BluetoothAccess) { pumpClient(gatt) }
+            synchronized(this@BluetoothAccess) {
+                if (status != BluetoothGatt.GATT_SUCCESS) { closeClient(gatt); return }
+                clientWrites[gatt]?.complete()
+                pumpClient(gatt)
+            }
         }
     }
     private val advertiseCallback = object : AdvertiseCallback() {
@@ -825,16 +837,16 @@ internal class BluetoothAccess(
         for (peer in authenticatedAwarePeers()) {
             if (!isIngressNeighbor(peer.link, receivedFrom)) queueAwarePayloads(peer.link, records)
         }
-        for ((gatt, link) in clientSessions) {
+        for ((gatt, link) in clientSessions.toMap()) {
             if (!isIngressNeighbor(link, receivedFrom) && NativeRuntime.sessionAuthenticated(link.handle)) {
-                try { enqueueClient(gatt, records.map { NativeRuntime.sessionSend(link.handle, it) }) }
+                try { enqueueClient(gatt, records.filter { link.durableHistory.admit(it) }.map { NativeRuntime.sessionSend(link.handle, it) }) }
                 catch (_: Exception) { }
             }
         }
-        for ((address, link) in serverSessions) {
+        for ((address, link) in serverSessions.toMap()) {
             val device = serverDevices[address] ?: continue
             if (!isIngressNeighbor(link, receivedFrom) && NativeRuntime.sessionAuthenticated(link.handle)) {
-                try { enqueueServer(device, records.map { NativeRuntime.sessionSend(link.handle, it) }) }
+                try { enqueueServer(device, records.filter { link.durableHistory.admit(it) }.map { NativeRuntime.sessionSend(link.handle, it) }) }
                 catch (_: Exception) { }
             }
         }
@@ -857,16 +869,16 @@ internal class BluetoothAccess(
         for (peer in authenticatedAwarePeers()) {
             if (!isIngressNeighbor(peer.link, receivedFrom)) queueAwarePayloads(peer.link, records)
         }
-        for ((gatt, link) in clientSessions) {
+        for ((gatt, link) in clientSessions.toMap()) {
             if (!isIngressNeighbor(link, receivedFrom) && NativeRuntime.sessionAuthenticated(link.handle)) {
-                try { enqueueClient(gatt, records.map { NativeRuntime.sessionSend(link.handle, it) }) }
+                try { enqueueClient(gatt, records.filter { link.durableHistory.admit(it) }.map { NativeRuntime.sessionSend(link.handle, it) }) }
                 catch (_: Exception) { }
             }
         }
-        for ((address, link) in serverSessions) {
+        for ((address, link) in serverSessions.toMap()) {
             val device = serverDevices[address] ?: continue
             if (!isIngressNeighbor(link, receivedFrom) && NativeRuntime.sessionAuthenticated(link.handle)) {
-                try { enqueueServer(device, records.map { NativeRuntime.sessionSend(link.handle, it) }) }
+                try { enqueueServer(device, records.filter { link.durableHistory.admit(it) }.map { NativeRuntime.sessionSend(link.handle, it) }) }
                 catch (_: Exception) { }
             }
         }
@@ -888,15 +900,15 @@ internal class BluetoothAccess(
         for (peer in authenticatedAwarePeers()) {
             if (!isIngressNeighbor(peer.link, receivedFrom)) queueAwarePayloads(peer.link, records)
         }
-        for ((gatt, link) in clientSessions) {
+        for ((gatt, link) in clientSessions.toMap()) {
             if (!isIngressNeighbor(link, receivedFrom) && NativeRuntime.sessionAuthenticated(link.handle)) {
-                try { enqueueClient(gatt, records.map { NativeRuntime.sessionSend(link.handle, it) }) } catch (_: Exception) { }
+                try { enqueueClient(gatt, records.filter { link.durableHistory.admit(it) }.map { NativeRuntime.sessionSend(link.handle, it) }) } catch (_: Exception) { }
             }
         }
-        for ((address, link) in serverSessions) {
+        for ((address, link) in serverSessions.toMap()) {
             val device = serverDevices[address] ?: continue
             if (!isIngressNeighbor(link, receivedFrom) && NativeRuntime.sessionAuthenticated(link.handle)) {
-                try { enqueueServer(device, records.map { NativeRuntime.sessionSend(link.handle, it) }) } catch (_: Exception) { }
+                try { enqueueServer(device, records.filter { link.durableHistory.admit(it) }.map { NativeRuntime.sessionSend(link.handle, it) }) } catch (_: Exception) { }
             }
         }
     }
@@ -1041,12 +1053,12 @@ internal class BluetoothAccess(
         for (peer in authenticatedAwarePeers()) {
             if (peer.link !== source) queueAwarePayloads(peer.link, listOf(payload))
         }
-        for ((gatt, link) in clientSessions) {
+        for ((gatt, link) in clientSessions.toMap()) {
             if (link !== source && NativeRuntime.sessionAuthenticated(link.handle)) {
                 try { enqueueClient(gatt, listOf(NativeRuntime.sessionSend(link.handle, payload))) } catch (_: Exception) { }
             }
         }
-        for ((address, link) in serverSessions) {
+        for ((address, link) in serverSessions.toMap()) {
             val device = serverDevices[address] ?: continue
             if (link !== source && NativeRuntime.sessionAuthenticated(link.handle)) {
                 try { enqueueServer(device, listOf(NativeRuntime.sessionSend(link.handle, payload))) } catch (_: Exception) { }
@@ -1380,17 +1392,21 @@ internal class BluetoothAccess(
         for (peer in authenticatedAwarePeers()) {
             delivered = queueAwarePayloads(peer.link, payloads) || delivered
         }
-        for ((gatt, link) in clientSessions) {
+        for ((gatt, link) in clientSessions.toMap()) {
             if (!NativeRuntime.sessionAuthenticated(link.handle)) continue
             delivered = try {
-                enqueueClient(gatt, payloads.map { NativeRuntime.sessionSend(link.handle, it) }); true
+                link.durableHistory.enqueue(payloads)
+                clientWrites.getOrPut(gatt) { BleWriteQueue() }
+                pumpClient(gatt); true
             } catch (_: Exception) { delivered }
         }
-        for ((address, link) in serverSessions) {
+        for ((address, link) in serverSessions.toMap()) {
             val device = serverDevices[address] ?: continue
             if (!NativeRuntime.sessionAuthenticated(link.handle)) continue
             delivered = try {
-                enqueueServer(device, payloads.map { NativeRuntime.sessionSend(link.handle, it) }); true
+                link.durableHistory.enqueue(payloads)
+                serverWrites.getOrPut(address) { BleWriteQueue() }
+                pumpServer(device); true
             } catch (_: Exception) { delivered }
         }
         return delivered
@@ -1471,32 +1487,46 @@ internal class BluetoothAccess(
         bytes[offset] = (value ushr 8).toByte(); bytes[offset + 1] = value.toByte()
     }
     private fun enqueueClient(gatt: BluetoothGatt, raw: List<ByteArray>) {
-        val queue = clientWrites.getOrPut(gatt) { ArrayDeque() }
+        val queue = clientWrites.getOrPut(gatt) { BleWriteQueue() }
         raw.forEach { queue.addAll(BleFrameCodec.split(NativeBridge.linkFrameEncode(it), legacyAttPayload)) }
         pumpClient(gatt)
     }
     private fun pumpClient(gatt: BluetoothGatt) {
         val queue = clientWrites[gatt] ?: return
-        if (queue.isEmpty()) return
+        if (queue.idle) {
+            val link = clientSessions[gatt] ?: return
+            val payload = link.durableHistory.next() ?: return
+            try { queue.addAll(BleFrameCodec.split(NativeBridge.linkFrameEncode(NativeRuntime.sessionSend(link.handle, payload)), legacyAttPayload)) }
+            catch (_: Exception) { closeClient(gatt); return }
+        }
         val rx = gatt.getService(serviceUuid)?.getCharacteristic(rxUuid) ?: return
+        val next = queue.begin() ?: return
         rx.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        rx.value = queue.removeFirst()
-        if (!gatt.writeCharacteristic(rx)) queue.clear()
+        rx.value = next
+        if (!gatt.writeCharacteristic(rx)) closeClient(gatt)
     }
     private fun enqueueServer(device: android.bluetooth.BluetoothDevice, raw: List<ByteArray>) {
-        val queue = serverWrites.getOrPut(device.address) { ArrayDeque() }
+        val queue = serverWrites.getOrPut(device.address) { BleWriteQueue() }
         val maximumWrite = serverWriteSizes[device.address] ?: legacyAttPayload
         raw.forEach { queue.addAll(BleFrameCodec.split(NativeBridge.linkFrameEncode(it), maximumWrite)) }
         pumpServer(device)
     }
     private fun pumpServer(device: android.bluetooth.BluetoothDevice) {
         val queue = serverWrites[device.address] ?: return
-        if (queue.isEmpty()) return
+        if (queue.idle) {
+            val link = serverSessions[device.address] ?: return
+            val payload = link.durableHistory.next() ?: return
+            try { queue.addAll(BleFrameCodec.split(NativeBridge.linkFrameEncode(NativeRuntime.sessionSend(link.handle, payload)), serverWriteSizes[device.address] ?: legacyAttPayload)) }
+            catch (_: Exception) { closeServer(device.address); gattServer?.cancelConnection(device); return }
+        }
         val tx = gattServer?.getService(serviceUuid)?.getCharacteristic(txUuid) ?: return
-        tx.value = queue.removeFirst()
+        tx.value = queue.begin() ?: return
         val sent = gattServer?.notifyCharacteristicChanged(device, tx, false) == true
         Log.i(logTag, "Queue notification to ${device.address}: $sent")
-        if (!sent) queue.clear()
+        if (!sent) {
+            closeServer(device.address)
+            gattServer?.cancelConnection(device)
+        }
     }
     private fun closeClient(gatt: BluetoothGatt) {
         clientSessions.remove(gatt)?.let { NativeRuntime.releaseSession(it.handle) }

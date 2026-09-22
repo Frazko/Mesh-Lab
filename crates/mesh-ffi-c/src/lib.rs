@@ -4565,8 +4565,8 @@ mod tests {
                 .unwrap();
         secure_store_install_policy(receiver, &bundle, 101).unwrap();
         let mut voice = vec![0x56, 0, 0, 0x1f, 0x40];
-        voice.extend((0..4096).map(|n| (n % 251) as u8));
-        // The 4 KiB audio body must cross the durable object as an
+        voice.extend((0..47 * 1024).map(|n| (n % 251) as u8));
+        // A full-size audio body must cross the durable object as an
         // announcement plus more than one encrypted chunk. This keeps the
         // test from passing through the small-object path used by short text.
         let queued = secure_store_enqueue_text(owner, &[71; 32], &voice, 102).unwrap();

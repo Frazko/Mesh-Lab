@@ -1,5 +1,67 @@
 import Foundation
 
+// Exercise the same write queue used by CoreBluetooth with a delayed ATT
+// completion and a new product action arriving while the radio is busy.
+let attQueue = BleWriteQueue()
+assert(attQueue.idle)
+attQueue.complete() // A stale completion cannot consume a new record.
+attQueue.append([[1], [2]])
+assert(!attQueue.idle)
+assert(attQueue.begin() == [1])
+attQueue.append([[3]])
+for _ in 0..<10 { assert(attQueue.begin() == nil) }
+attQueue.complete()
+assert(attQueue.begin() == [2])
+attQueue.complete()
+assert(attQueue.begin() == [3])
+attQueue.complete()
+assert(attQueue.begin() == nil)
+assert(attQueue.idle)
+
+let radioQueue = BleWriteQueue()
+let voiceFrames = (0..<48).map { index in (0..<1024).map { UInt8(truncatingIfNeeded: index + $0) } } + [[9, 8, 7]]
+for frame in voiceFrames { radioQueue.append(BleFrameCodec.split(frame, maximumWrite: 185)!) }
+let radioReceiver = BleFrameCodec.Assembler()
+var receivedFrames = [[UInt8]]()
+var fragmentCount = 0
+while let fragment = radioQueue.begin() {
+  if fragmentCount % 7 == 0 {
+    radioQueue.refused()
+    assert(radioQueue.begin() == fragment)
+  }
+  assert(radioQueue.begin() == nil)
+  if let frame = radioReceiver.accept(fragment) { receivedFrames.append(frame) }
+  radioQueue.complete()
+  fragmentCount += 1
+}
+assert(receivedFrames == voiceFrames)
+let history = DurableRecordHistory()
+let routedRecords = (0..<520).map { index -> [UInt8] in
+  var bytes = [UInt8](repeating: 0, count: 100)
+  bytes[0] = 0x72; bytes[1] = 1
+  bytes[98] = UInt8(index >> 8); bytes[99] = UInt8(truncatingIfNeeded: index)
+  return bytes
+}
+assert(routedRecords.filter { history.admit($0) }.count == 520)
+for _ in 0..<20 { assert(routedRecords.filter { history.admit($0) }.isEmpty) }
+assert(DurableRecordHistory().admit(routedRecords[0]))
+let scheduler = DurableRecordHistory()
+scheduler.enqueue(Array(routedRecords.prefix(100)))
+assert(scheduler.next() == routedRecords[0])
+scheduler.enqueue([routedRecords[101]] + Array(routedRecords.prefix(100)))
+assert(scheduler.next() == routedRecords[101])
+for item in routedRecords[1..<100] { assert(scheduler.next() == item) }
+assert(scheduler.next() == nil)
+let boundedHistory = DurableRecordHistory()
+for index in 0...8192 {
+  var record = routedRecords[0]
+  record[98] = UInt8(index >> 8); record[99] = UInt8(truncatingIfNeeded: index)
+  assert(boundedHistory.admit(record))
+}
+assert(boundedHistory.admit(routedRecords[0]))
+for _ in 0..<2 { assert(history.admit([0x7d])) }
+print("PASS: Swift ATT serialization, voice fragmentation, backpressure and outbox replay suppression")
+
 let input = [UInt8](arrayLiteral: 0x83,1,1,0x86,1,0,0,0,0xf4,0x80)
 var decoder = try MeshEnvelope(input)
 let initial = try decoder.snapshot(method: 1)
