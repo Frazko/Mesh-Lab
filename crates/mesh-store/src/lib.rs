@@ -22,6 +22,8 @@ const RELAY_RECEIPT_ACK_SCHEMA: &str =
     include_str!("../../../schema/store/009-relay-receipt-acks.sql");
 const LOGICAL_DELIVERY_SCHEMA: &str =
     include_str!("../../../schema/store/010-logical-delivery.sql");
+const ORIGIN_RECEIPT_ACK_SCHEMA: &str =
+    include_str!("../../../schema/store/011-origin-receipt-acks.sql");
 type PolicyRow = ([u8; 32], [u8; 32], u64, [u8; 32]);
 type RelayMetadataRow = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>, u8, u8, u64);
 fn policy_schema_hash() -> [u8; 32] {
@@ -139,6 +141,9 @@ fn logical_delivery_schema_hash() -> [u8; 32] {
         .concat()
         .as_slice(),
     )
+}
+fn origin_receipt_ack_schema_hash() -> [u8; 32] {
+    digest([logical_delivery_schema_hash().as_slice(), ORIGIN_RECEIPT_ACK_SCHEMA.as_bytes()].concat().as_slice())
 }
 mod authenticated;
 pub use authenticated::{ChunkStored, ReceiptCommit};
@@ -433,7 +438,7 @@ impl Store {
         let schema: i64 = db
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .map_err(|_| DurableError::KeyOrCorruption)?;
-        if !(0..=10).contains(&schema) {
+        if !(0..=11).contains(&schema) {
             return Err(DurableError::UnsupportedSchema);
         }
         db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY; PRAGMA synchronous=FULL; PRAGMA cipher_memory_security=ON;").map_err(sql)?;
@@ -466,7 +471,7 @@ impl Store {
                 params![&member.0[..], &digest(SCHEMA.as_bytes())[..]],
             )
             .map_err(sql)?;
-        } else if !(1..=10).contains(&schema) {
+        } else if !(1..=11).contains(&schema) {
             return Err(DurableError::UnsupportedSchema);
         }
         let (stored_member, hash): (Vec<u8>, Vec<u8>) = tx
@@ -491,6 +496,7 @@ impl Store {
             8 => receipt_ack_schema_hash(),
             9 => relay_receipt_ack_schema_hash(),
             10 => logical_delivery_schema_hash(),
+            11 => origin_receipt_ack_schema_hash(),
             _ => return Err(DurableError::UnsupportedSchema),
         };
         if stored_member != member.0 || hash != expected_hash {
@@ -571,6 +577,13 @@ impl Store {
                 [&logical_delivery_schema_hash()[..]],
             )
             .map_err(sql)?;
+        }
+        if schema <= 10 {
+            tx.execute_batch(ORIGIN_RECEIPT_ACK_SCHEMA).map_err(sql)?;
+            tx.execute(
+                "UPDATE meta SET schema_hash=?1 WHERE singleton=1",
+                [&origin_receipt_ack_schema_hash()[..]],
+            ).map_err(sql)?;
         }
         tx.commit().map_err(sql)?;
         Ok(Self {

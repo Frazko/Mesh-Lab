@@ -402,6 +402,47 @@ impl Store {
         }
         Ok(result)
     }
+    /// Persist the signed ACK before exposing it to a host. A new drain or
+    /// process must replay the same bytes and route ID, not manufacture new
+    /// control traffic for every GPS receipt. A changed authorization policy
+    /// may require re-signing, but the target receipt must still verify.
+    pub fn origin_receipt_ack(
+        &self,
+        object: ObjectId,
+        actor: MemberId,
+        roster: &VerifiedRoster,
+        signer: &IdentitySigningKey,
+        now: u64,
+    ) -> Result<Vec<u8>> {
+        roster.validate_at(now)?;
+        if signer.public_key() != roster.signing_key(self.member)? {
+            return Err(DurableError::AuthenticationFailed);
+        }
+        let receipt: Vec<u8> = self.db.query_row(
+            "SELECT receipt FROM target_receipts WHERE object_id=?1 AND actor=?2",
+            params![&object.0[..], &actor.0[..]], |row| row.get(0),
+        ).optional().map_err(sql)?.ok_or(DurableError::NotFound)?;
+        let cached: Option<Vec<u8>> = self.db.query_row(
+            "SELECT ack FROM origin_receipt_acks WHERE object_id=?1 AND actor=?2",
+            params![&object.0[..], &actor.0[..]], |row| row.get(0),
+        ).optional().map_err(sql)?;
+        if let Some(ack) = cached {
+            if protocol::verify_receipt_ack(&ack, roster, now).is_ok() {
+                return Ok(ack);
+            }
+        }
+        self.verify_target_receipt(object, &receipt, roster, now)?;
+        let ack = protocol::issue_receipt_ack(
+            &receipt, object, self.member, actor, roster.scope(), signer, now,
+        )?;
+        self.db.execute(
+            "INSERT INTO origin_receipt_acks VALUES(?1,?2,?3) \
+             ON CONFLICT(object_id,actor) DO UPDATE SET ack=excluded.ack",
+            params![&object.0[..], &actor.0[..], &ack],
+        ).map_err(sql)?;
+        Ok(ack)
+    }
+
     /// Commits an origin-signed acknowledgement only when it refers to this
     /// member's exact durable receipt. The receipt itself remains local audit
     /// evidence; this row only removes it from the retry scheduler.

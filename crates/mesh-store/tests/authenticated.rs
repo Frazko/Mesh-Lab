@@ -53,6 +53,38 @@ fn stage(s: &mut Store, lab: &Lab, message: &protocol::SealedMessage) {
         s.stage_authenticated_chunk(id, i, b, 2).unwrap();
     }
 }
+
+#[test]
+fn version_ten_adds_ack_cache_without_losing_reserved_operations() {
+    let files = Files::new();
+    let path = files.path("version-ten.db");
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.pragma_update(None, "key", format!("x'{}'", "07".repeat(32))).unwrap();
+    let scripts = [
+        include_str!("../../../schema/store/001.sql"),
+        include_str!("../../../schema/store/002-authentication.sql"),
+        include_str!("../../../schema/store/003-policy.sql"),
+        include_str!("../../../schema/store/004-group-capacity.sql"),
+        include_str!("../../../schema/store/005-relay-custody.sql"),
+        include_str!("../../../schema/store/006-relay-ingress.sql"),
+        include_str!("../../../schema/store/007-relay-receipts.sql"),
+        include_str!("../../../schema/store/008-receipt-acks.sql"),
+        include_str!("../../../schema/store/009-relay-receipt-acks.sql"),
+        include_str!("../../../schema/store/010-logical-delivery.sql"),
+    ];
+    for script in scripts { db.execute_batch(script).unwrap(); }
+    let hash = digest(scripts.concat().as_bytes());
+    db.execute("INSERT INTO meta VALUES(1,?1,2,?2)",
+        rusqlite::params![&[1u8; 32][..], &hash[..]]).unwrap();
+    db.execute("INSERT INTO operations(id,command_hash,sequence) VALUES(?1,?2,1)",
+        rusqlite::params![&OP.0[..], &[0u8; 32][..]]).unwrap();
+    drop(db);
+    let mut store = open(&path, 1);
+    assert_eq!(store.reserve(OP, [0; 32]).unwrap().sequence, 1);
+    drop(store);
+    let mut reopened = open(&path, 1);
+    assert_eq!(reopened.reserve(OP, [0; 32]).unwrap().sequence, 1);
+}
 fn source(s: &mut Store, lab: &Lab, message: &protocol::SealedMessage) {
     s.reserve(OP, [0; 32]).unwrap();
     s.commit_sealed(OP, [0; 32], message, &lab.roster, 1)
@@ -364,7 +396,7 @@ fn version_three_expands_policy_roster_to_fifty_without_losing_certificates() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        10
+        11
     );
     assert_eq!(
         db.query_row(

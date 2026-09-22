@@ -512,6 +512,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
         receivedVoices += 1
         if verifiedIncomingVoice.count == maxVerifiedIncoming { verifiedIncomingVoice.removeFirst() }
         verifiedIncomingVoice.append(CertifiedIncomingVoice(authorId: authorId, objectId: objectId, logicalId: logicalId, verifiedAtUnixSeconds: verifiedAt, durationMillis: duration, context: context!))
+        log("Certified durable voice committed locally: \(audio.count) bytes, \(duration) ms")
         _ = drainDurableReceiptOutbox()
       } catch { }
       return

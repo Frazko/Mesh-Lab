@@ -1579,3 +1579,60 @@ perfil de provisión disponible. Pendiente: verificar ambos sentidos sin salida
 a Internet, medir aceptación → recepción certificada → UI para mensajes cortos,
 reproducir audio recibido, confirmar GPS renovado y repetir con reconexión.
 No se aprueba el gate físico ni se eleva el avance global por estas pruebas locales.
+
+### Seguimiento físico del 22 de septiembre
+
+**Plan completo: 81%; bloque de comunicación: 70% estimado.** Se reabre la
+validación del bloque después del reporte de Android en «Conectando» sin
+entrega. Posteriormente el usuario confirmó: «ahora están llegando» y sugirió
+que aún no estaban instalados los últimos cambios. Esa posible causa no está
+confirmada: el registro de trabajo anterior sí acredita instalaciones release,
+pero no identifica qué versión estaba abierta durante cada intento del usuario.
+
+La recepción reportada es evidencia parcial, sin especificación del tipo de
+contenido, sentido, latencia ni aislamiento de Internet. Los registros nativos
+también muestran registros BLE recibidos y texto durable confirmado localmente;
+eso por sí solo no acredita su presentación en la UI. Queda probar mensajes
+rápidos, reacciones, audio reproducible y GPS actualizado en ambos sentidos sin
+Internet, y repetir después de desconectar/reconectar Bluetooth. No se añaden
+cambios de transporte basados únicamente en el fallo previo a esta confirmación.
+
+### Audio de Convoy, confirmaciones repetidas y estado GPS
+
+**2026-09-22 — Plan completo: 81%; bloque de comunicación: 75% estimado.**
+El usuario confirmó mensajes cortos funcionando bien y GPS aparentemente
+actualizándose, pero audio sin funcionar. La revisión encontró dos defectos
+independientes: los eventos certificados de voz de Malla se agregaban al
+historial sin pasar por el receptor de radio, y éste sólo reproducía URLs de
+Internet. Ahora usa el audio local certificado, respeta silencio, serializa
+notas y comparte la deduplicación con la llegada por Internet.
+
+Los registros de Android muestran voces aceptadas en 15–20 registros durables y
+ráfagas extensas de confirmaciones. Cada consulta del outbox volvía a firmar
+ACKs con la hora actual, generando bytes e identidades de ruta nuevas. El SDK
+persiste una confirmación por recibo antes de transmitirla; la repite idéntica
+tras nuevos drenajes y reinicios. La migración local cifrada 10→11 conserva
+operaciones existentes y no cambia Supabase ni la app pública. La expiración
+elimina también el ACK mediante su relación con el recibo. La prueba de voz
+de 47 KiB ahora verifica 20 consultas posteriores, reinicio, recepción del ACK
+y retiro del recibo pendiente.
+
+El marcador de foto calculaba amarillo/gris tanto por GPS como por estado del
+servidor. Ahora su punto y foto usan la ubicación recibida por cualquier ruta:
+verde hasta cinco minutos, amarillo después de cinco, gris después de diez;
+la salida explícita del participante sigue respetándose. GPS en Malla mantiene
+la cadencia de seis segundos.
+
+Validación: **46 pruebas Rust** (incluida migración 10→11), **13 Kotlin/JNI**,
+suite Swift de contrato/fragmentación y **28 pruebas Flutter** de radio,
+autoplay local, duplicados, silencio, serialización, recepción autorizada y GPS.
+Analizador Flutter sin incidencias en los cinco archivos de producción
+modificados. Cobertura de líneas nuevas medidas: **91,7%** en la función de
+ACK persistente y **97,2%** en los cambios Dart cubiertos por LCOV. Los logs
+nativos ahora identifican explícitamente voz reconstruida y guardada, sin
+imprimir el contenido. Ambos builds release compilaron y se instalaron el
+22 de septiembre: Android confirmó instalación y arranque de su proceso nuevo;
+CoreDevice confirmó instalación y lanzamiento de iPhone. El entitlement WFA
+del fuente quedó restaurado; el build local iOS usa BLE con el perfil disponible.
+Pendiente: recepción/reproducción física de audio en ambos sentidos sin
+Internet; las pruebas automáticas no cierran ese gate.

@@ -3,7 +3,7 @@ use mesh_crypto::{DeliverySecret, IdentitySigningKey, OsRandom, RandomSource, Sc
 use mesh_link::Frame;
 use mesh_object::ObjectPolicy;
 use mesh_protocol::{
-    issue_authority_handoff, issue_certificate, issue_receipt_ack, receipt_ack_route,
+    issue_authority_handoff, issue_certificate, receipt_ack_route,
     receipt_route, seal_message, verify_enrollment_request, verify_receipt_ack, AuthorityHandoff,
     CertificateClaims, DurableRecord, PolicyBundle, SealRequest, VerifiedRoster,
 };
@@ -1039,7 +1039,7 @@ pub fn secure_store_receipt_ack_record(
             .ok_or(Error::StaleRequest)?
             .verify(now)
             .map_err(|_| Error::StaleRequest)?;
-        let Some((object, actor, receipt)) = store
+        let Some((object, actor, _receipt)) = store
             .target_receipt_ack_outbox(now)
             .map_err(|_| Error::InternalInvariant)?
             .get(usize::from(slot))
@@ -1062,15 +1062,7 @@ pub fn secure_store_receipt_ack_record(
         let manifest = store
             .manifest(object)
             .map_err(|_| Error::InternalInvariant)?;
-        let ack = issue_receipt_ack(
-            &receipt,
-            object,
-            store.local_member(),
-            actor,
-            roster.scope(),
-            &signer,
-            now,
-        )
+        let ack = store.origin_receipt_ack(object, actor, &roster, &signer, now)
         .map_err(|_| Error::InternalInvariant)?;
         let digest: [u8; 32] = Sha256::digest(&ack).into();
         let mut relay_id = [0u8; 16];
@@ -4594,6 +4586,19 @@ mod tests {
         assert!(secure_store_outbox_record(owner, 0, 102)
             .unwrap()
             .is_empty());
+        // A complete audio receipt is one control message, even while GPS
+        // continues to drain the outbox over time and after process restart.
+        let ack = secure_store_receipt_ack_record(owner, &[71; 32], 0, 103).unwrap();
+        assert!(!ack.is_empty());
+        for now in 104..124 {
+            assert_eq!(secure_store_receipt_ack_record(owner, &[71; 32], 0, now).unwrap(), ack);
+        }
+        secure_store_release(owner).unwrap();
+        let owner = secure_store_open(&[72; 32], &owner_member, owner_path.to_str().unwrap()).unwrap();
+        assert_eq!(secure_store_receipt_ack_record(owner, &[71; 32], 0, 124).unwrap(), ack);
+        let frame = RoutedRecord::decode(&ack).unwrap().frame;
+        assert_eq!(secure_store_accept_routed(receiver, &ack, &frame.previous_hop.0, 124), Ok(ROUTED_ACCEPTED_RECEIPT_ACK));
+        assert!(secure_store_receipt_record(receiver, 0, 124).unwrap().is_empty());
         secure_store_release(owner).unwrap();
         secure_store_release(receiver).unwrap();
         let _ = std::fs::remove_file(owner_path);

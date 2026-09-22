@@ -959,6 +959,7 @@ internal class BluetoothAccess(
                 receivedVoices++
                 if (verifiedIncomingVoice.size == maxVerifiedIncoming) verifiedIncomingVoice.removeFirst()
                 verifiedIncomingVoice.addLast(CertifiedIncomingVoice(authorId, objectId, logicalId, verifiedAt, duration, productContext))
+                Log.i(logTag, "Certified durable voice committed locally: ${audio.size} bytes, $duration ms")
             } catch (_: Exception) { return }
             drainDurableReceiptOutbox(); return
         }
