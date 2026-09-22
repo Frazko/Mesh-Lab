@@ -1535,7 +1535,7 @@ internal class BluetoothAccess(
         const val maxVoicePayload = 4096
         const val maxVoiceChunks = 16
         const val maxVoiceBytes = 48 * 1024
-        const val maxVoiceDurationMillis = 8_000L
+        const val maxVoiceDurationMillis = 10_000L
         const val policyHeaderBytes = 35
         const val maxPolicyChunkPayload = 3_500
         const val maxPolicyChunks = 20

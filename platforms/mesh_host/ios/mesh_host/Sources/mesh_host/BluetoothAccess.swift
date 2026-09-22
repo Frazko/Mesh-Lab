@@ -111,7 +111,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private let maxVoicePayload = 4096
   private let maxVoiceChunks = 16
   private let maxVoiceBytes = 48 * 1024
-  private let maxVoiceDurationMillis: Int64 = 8_000
+  private let maxVoiceDurationMillis: Int64 = 10_000
 
   private func log(_ message: String) {
     NSLog("[MeshBle] %@", message)

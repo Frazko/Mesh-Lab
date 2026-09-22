@@ -1368,3 +1368,38 @@ con el iPhone en el mismo convoy, las dos etapas Noise y
 `Secure link authenticated`. Wi-Fi Aware en la distribución iOS continúa como
 gate separado: el código y el entitlement están declarados, pero el perfil de
 provisión actual de Convoy todavía no incluye la capacidad concedida por Apple.
+
+## Entrega inmediata de texto, voz y GPS en Convoy
+
+**Actualizado: 2026-09-21. Plan completo: 81%; bloque de contenido por Malla:
+92%.**
+
+La observación física de que un mensaje aparecía únicamente al restablecer el
+Wi-Fi confirmó que el backend estaba recuperando la acción, pero la recepción
+cercana se perdía en la interfaz. El host Android había registrado
+`Certified durable text committed locally`; Convoy drenaba ese evento único
+mientras la lista autorizada seguía cargando, lo proyectaba contra un roster
+vacío y lo descartaba. El adaptador ahora conserva hasta 64 acciones
+certificadas durante esa ventana, vuelve a leer el roster actual y entrega
+texto, voz y GPS solamente después de resolver autorización y participación.
+No relaja la vinculación de identidad Field con el usuario y convoy activos.
+
+La voz saliente también excedía el presupuesto del objeto cifrado: el grabador
+producía WAV PCM de aproximadamente 320 KiB para diez segundos frente al techo
+nativo de 48 KiB. Convoy ahora captura AAC-LC mono a 16 kHz y 24 kbps, permite
+hasta diez segundos y reserva margen para el encabezado y contexto autenticado.
+SDK, Android e iOS comparten los mismos límites: diez segundos y 47 KiB de
+audio codificado antes del sobre durable.
+
+La revisión de GPS confirma su recorrido funcional sin Internet: valida la
+lectura, limita emisiones cercanas a una cada cinco segundos, cifra convoy,
+autor, UUID y hora de captura, y actualiza el marcador del participante tras la
+misma autorización diferida. La suite conjunta aprobó 59 pruebas enfocadas,
+incluida una que recibe texto, voz y GPS antes de resolver el roster y exige su
+entrega posterior en orden; el SDK aprobó 34 pruebas y análisis limpio. Los
+builds release Android e iOS finalizaron; iOS quedó instalado y abierto. El
+entitlement Wi-Fi Aware permanece en el código fuente, aunque se retiró sólo
+del artefacto iOS local porque el perfil de provisión todavía no lo concede.
+Android no estaba visible por ADB y su APK actualizado quedó pendiente de
+instalación. No se aumenta el porcentaje global hasta repetir texto/voz en dos
+teléfonos sin Internet y ejecutar la validación física posterior de GPS.

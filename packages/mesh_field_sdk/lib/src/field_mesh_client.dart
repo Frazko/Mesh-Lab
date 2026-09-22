@@ -7,6 +7,9 @@ import 'package:mesh_host/mesh_host.dart';
 
 import 'field_mesh_models.dart';
 
+const Duration _maxVoiceDuration = Duration(seconds: 10);
+const int _maxEncodedVoiceBytes = 47 * 1024;
+
 FieldDeliveryState _deliveryState(String value) => switch (value) {
   'queued' => FieldDeliveryState.queued,
   'partial' => FieldDeliveryState.partial,
@@ -632,7 +635,9 @@ final class FieldMeshClient
     String? context,
   }) async {
     if (audio.isEmpty ||
+        audio.length > _maxEncodedVoiceBytes ||
         duration <= Duration.zero ||
+        duration > _maxVoiceDuration ||
         !(await status()).secure) {
       return null;
     }
@@ -756,7 +761,7 @@ final class FieldMeshClient
         !RegExp(r'^[0-9a-f]{32}$').hasMatch(event.logicalId) ||
         event.verifiedAt.millisecondsSinceEpoch <= 0 ||
         event.duration <= Duration.zero ||
-        event.duration > const Duration(seconds: 8) ||
+        event.duration > _maxVoiceDuration ||
         utf8.encode(event.context).length > 512) {
       return null;
     }

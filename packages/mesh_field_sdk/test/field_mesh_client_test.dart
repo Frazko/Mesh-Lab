@@ -657,6 +657,20 @@ void main() {
         await sdk.sendVoice(Uint8List.fromList([1]), Duration.zero),
         isNull,
       );
+      expect(
+        await sdk.sendVoice(
+          Uint8List.fromList([1]),
+          const Duration(seconds: 10, milliseconds: 1),
+        ),
+        isNull,
+      );
+      expect(
+        await sdk.sendVoice(
+          Uint8List(47 * 1024 + 1),
+          const Duration(seconds: 1),
+        ),
+        isNull,
+      );
       gateway.acceptVoice = false;
       expect(
         await sdk.sendVoice(
@@ -1176,7 +1190,7 @@ void main() {
             objectId: 'd' * 64,
             logicalId: 'c' * 32,
             verifiedAt: DateTime.utc(2026, 9, 16, 12),
-            duration: const Duration(seconds: 9),
+            duration: const Duration(seconds: 11),
             context: '',
           ),
         ];
