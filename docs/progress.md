@@ -1462,3 +1462,44 @@ Pasaron 21 pruebas de frescura, tratamiento visual, colores del punto, cámara y
 marcadores. Se cubren los límites de cinco y diez minutos y el mapeo real a
 verde, amarillo y gris. Queda generar los artefactos release e instalar en los
 teléfonos para comprobar el cambio temporal en una sesión real.
+
+## Canal de contenido listo y recuperación GPS de Android
+
+**Actualizado: 2026-09-21. Plan completo: 81%; bloque de entrega física por
+Malla: 90%.**
+
+La investigación en el SM-A736B confirmó que BLE terminaba las dos etapas Noise
+y autenticaba el enlace, pero Convoy no invocaba la cola durable del SDK. El
+emisor repetía una autorización dependiente del servidor justo antes de cada
+GPS, texto o audio; al quedar desactualizada durante una pérdida de Internet,
+bloqueaba contenido ya autorizado por el grupo nativo y por la validación del
+receptor. Se retiró ese bloqueo redundante. Las comprobaciones estrictas de
+convoy, autor Field, participación activa, vigencia y deduplicación permanecen
+en el host cifrado y en cada receptor. Un fallo de la firma opcional de relevo a
+Internet tampoco cancela ahora el envío cercano.
+
+El semáforo verde exige desde este cambio un enlace nativo autenticado, al menos
+un vecino de radio y un roster certificado vigente que cubra a los
+participantes activos. Mientras la radio ya está enlazada pero el canal de
+contenido aún prepara su autorización, la interfaz permanece amarilla y muestra
+“Preparando el canal seguro del convoy”. Así el producto no promete una entrega
+que todavía no puede aceptar.
+
+Android recupera además el GPS después de un reinicio frío: el manifiesto final
+conserva `ACCESS_FINE_LOCATION` en versiones modernas, la entrada al convoy
+vuelve a solicitar precisión cuando una instalación anterior sólo obtuvo una
+ubicación aproximada, y el servicio detiene tanto el isolate actual como uno
+heredado antes de arrancar una sesión nueva. El APK release quedó instalado con
+ubicación precisa concedida; la pantalla física volvió a mostrar “GPS activo” y
+el marcador propio.
+
+Pasaron **71 pruebas enfocadas**. Incluyen el flujo funcional completo de
+mensaje rápido, reacción, GPS y voz por un enlace certificado; dos carriles
+Internet/Malla independientes; firma opcional fallida; roster incompleto o
+vencido; semáforo amarillo hasta que contenido esté listo; permiso preciso y
+recuperación del servicio de ubicación. Los builds release Android e iOS
+finalizaron y quedaron instalados. El artefacto local de iOS usa BLE porque el
+perfil de provisión aún no concede Wi‑Fi Aware; el entitlement WFA permanece en
+el código. Falta la confirmación física final, con ambos teléfonos dentro de
+`Testing` y sin Internet, de recepción en iPhone del marcador Android, mensaje
+rápido, reacción y audio.
