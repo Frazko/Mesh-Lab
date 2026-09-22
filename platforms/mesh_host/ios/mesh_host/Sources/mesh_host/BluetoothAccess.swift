@@ -30,6 +30,9 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private var centralState: CBManagerState = .unknown
   private var peripheralState: CBManagerState = .unknown
   private var requested = false
+  private var maintenanceTimer: DispatchSourceTimer?
+  private var clientHealth = [UUID: BleLinkHealth]()
+  private var serverHealth = [UUID: BleLinkHealth]()
   private var advertising = false
   private var peers = Set<UUID>()
   private var connected = [UUID: CBPeripheral]()
@@ -50,6 +53,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private let maxDurableRelaySlots = 65
   private let maxDurableOriginSlots = 520
   private final class SessionLink { let handle: UInt64; let initiator: Bool; var stage: Int = 0; var originOutboxDrained = false
+    var health = BleLinkHealth()
     let durableHistory = DurableRecordHistory()
     init(_ handle: UInt64, initiator: Bool) { self.handle = handle; self.initiator = initiator }
   }
@@ -118,6 +122,8 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private let maxVoiceBytes = 48 * 1024
   private let maxVoiceDurationMillis: Int64 = 10_000
 
+  deinit { maintenanceTimer?.cancel(); reconnectWorkItem?.cancel() }
+
   private func log(_ message: String) {
     NSLog("[MeshBle] %@", message)
   }
@@ -165,6 +171,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   func startDiscovery() -> BluetoothInfo {
     requested = true
+    startMaintenance()
     peers.removeAll()
     probes = 0
     ensureManagers()
@@ -175,6 +182,8 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   func stopDiscovery() -> BluetoothInfo {
     requested = false
+    maintenanceTimer?.cancel(); maintenanceTimer = nil
+    clientHealth.removeAll(); serverHealth.removeAll()
     reconnectWorkItem?.cancel()
     reconnectWorkItem = nil
     central?.stopScan()
@@ -238,7 +247,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     guard let handle = runtime({ try NativeRuntime.shared.startSession(try SecureIdentity().groupMaterial(), initiator: true) }),
           let first = runtime({ try NativeRuntime.shared.sessionWrite(handle) }) else { return }
     log("Starting Noise handshake with \(peripheral.identifier.uuidString)")
-    clientSessions[peripheral.identifier] = SessionLink(handle, initiator: true)
+    let link = SessionLink(handle, initiator: true)
+    link.health = clientHealth[peripheral.identifier] ?? BleLinkHealth()
+    clientHealth[peripheral.identifier] = link.health
+    clientSessions[peripheral.identifier] = link
     enqueueClient(peripheral, raw: [first])
   }
   private func receiveFromServer(_ central: CBCentral, fragment: Data) {
@@ -254,7 +266,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     if handleEnrollmentFromClient(raw, central: central) { return }
     var link = serverSessions[central.identifier]
     if link == nil, let handle = runtime({ try NativeRuntime.shared.startSession(try SecureIdentity().groupMaterial(), initiator: false) }) {
-      link = SessionLink(handle, initiator: false); serverSessions[central.identifier] = link
+      link = SessionLink(handle, initiator: false)
+      link!.health = serverHealth[central.identifier] ?? BleLinkHealth()
+      serverHealth[central.identifier] = link!.health
+      serverSessions[central.identifier] = link
     }
     guard let link else { return }
     if link.stage == 0 {
@@ -316,7 +331,9 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   }
   private func acceptProtected(_ link: SessionLink, raw: [UInt8]) {
     guard let data = runtime({ try NativeRuntime.shared.sessionReceive(link.handle, frame: raw) }) else { return }
-    if runtime({ try NativeRuntime.shared.sessionAuthenticated(link.handle) }) == true {
+    let authenticated = runtime({ try NativeRuntime.shared.sessionAuthenticated(link.handle) }) == true
+    link.health.received(now: ProcessInfo.processInfo.systemUptime, authenticated: authenticated)
+    if authenticated {
       probes += 1
       if !link.originOutboxDrained {
         link.originOutboxDrained = true
@@ -332,7 +349,11 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
       log("Bluetooth text receipt received")
       return
     }
-    if data.first == heartbeatMarker || data.first == heartbeatAckMarker || data.first == presenceMarker { return }
+    if data.first == heartbeatMarker, data.count == textHeaderBytes {
+      sendBleControl(link, [heartbeatAckMarker] + Array(data.dropFirst()))
+      return
+    }
+    if data.first == heartbeatAckMarker || data.first == presenceMarker { return }
     if !data.isEmpty, !acceptVoiceChunk(data), let text = unwrapText(data),
        let message = String(bytes: text, encoding: .utf8) {
       messages += 1
@@ -987,8 +1008,51 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
       }
     }
   }
-  private func closeClient(_ peripheral: CBPeripheral) { if let link = clientSessions.removeValue(forKey: peripheral.identifier) { runtime { NativeRuntime.shared.releaseSession(link.handle) } }; clientWrites.removeValue(forKey: peripheral.identifier); inbound.removeValue(forKey: "c:\(peripheral.identifier.uuidString)"); central?.cancelPeripheralConnection(peripheral) }
-  private func closeServer(_ id: UUID) { if let link = serverSessions.removeValue(forKey: id) { runtime { NativeRuntime.shared.releaseSession(link.handle) } }; serverWrites.removeValue(forKey: id); inbound.removeValue(forKey: "s:\(id.uuidString)") }
+  private func sendBleControl(_ link: SessionLink, _ payload: [UInt8]) {
+    link.durableHistory.enqueue([payload])
+    if let (id, _) = clientSessions.first(where: { $0.value === link }), let peer = connected[id] {
+      if clientWrites[id] == nil { clientWrites[id] = BleWriteQueue() }
+      pumpClient(peer)
+    } else if let (id, _) = serverSessions.first(where: { $0.value === link }), let peer = subscribers[id] {
+      if serverWrites[id] == nil { serverWrites[id] = BleWriteQueue() }
+      pumpServer(peer)
+    }
+  }
+
+  private func startMaintenance() {
+    guard maintenanceTimer == nil else { return }
+    let timer = DispatchSource.makeTimerSource(queue: .main)
+    timer.schedule(deadline: .now() + 1, repeating: 1)
+    timer.setEventHandler { [weak self] in self?.maintainLinks() }
+    maintenanceTimer = timer
+    timer.resume()
+  }
+
+  private func maintainLinks() {
+    guard requested, centralState == .poweredOn else { return }
+    let now = ProcessInfo.processInfo.systemUptime
+    for (id, health) in Array(clientHealth) {
+      guard let peer = connected[id] else { clientHealth.removeValue(forKey: id); continue }
+      if health.expired(now: now) {
+        log("BLE peer stopped proving liveness; reconnecting")
+        closeClient(peer)
+        connected.removeValue(forKey: id); peers.remove(id)
+        scheduleReconnect()
+      } else if health.probeDue(now: now), let link = clientSessions[id] {
+        sendBleControl(link, [heartbeatMarker, 0, 0, 0, 1])
+      }
+    }
+    for (id, health) in Array(serverHealth) {
+      if health.expired(now: now) {
+        closeServer(id); subscribers.removeValue(forKey: id)
+      } else if health.probeDue(now: now), let link = serverSessions[id] {
+        sendBleControl(link, [heartbeatMarker, 0, 0, 0, 1])
+      }
+    }
+  }
+
+  private func closeClient(_ peripheral: CBPeripheral) { clientHealth.removeValue(forKey: peripheral.identifier); if let link = clientSessions.removeValue(forKey: peripheral.identifier) { runtime { NativeRuntime.shared.releaseSession(link.handle) } }; clientWrites.removeValue(forKey: peripheral.identifier); inbound.removeValue(forKey: "c:\(peripheral.identifier.uuidString)"); central?.cancelPeripheralConnection(peripheral) }
+  private func closeServer(_ id: UUID) { serverHealth.removeValue(forKey: id); if let link = serverSessions.removeValue(forKey: id) { runtime { NativeRuntime.shared.releaseSession(link.handle) } }; serverWrites.removeValue(forKey: id); inbound.removeValue(forKey: "s:\(id.uuidString)") }
 
   /// Bluetooth can disappear underneath an active GATT connection without a
   /// `didDisconnectPeripheral` callback. A new Android GATT session must never
@@ -999,6 +1063,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     clientSessions.removeAll(); serverSessions.removeAll()
     clientWrites.removeAll(); serverWrites.removeAll(); inbound.removeAll()
     connected.removeAll(); peers.removeAll(); subscribers.removeAll()
+    clientHealth.removeAll(); serverHealth.removeAll()
     enrollmentDetail = "Bluetooth se reinició. Reconectando automáticamente…"
   }
 
@@ -1017,6 +1082,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
       log("Found Mesh Lab advertisement \(peripheral.identifier.uuidString)")
       connected[peripheral.identifier] = peripheral
       peripheral.delegate = self
+      clientHealth[peripheral.identifier] = BleLinkHealth()
       central.connect(peripheral)
     }
   }
@@ -1024,6 +1090,23 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
     log("Connected to Android GATT \(peripheral.identifier.uuidString)")
     peripheral.discoverServices([serviceUUID])
+  }
+
+  func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral,
+                      error: Error?) {
+    connected.removeValue(forKey: peripheral.identifier)
+    peers.remove(peripheral.identifier)
+    closeClient(peripheral)
+    scheduleReconnect()
+  }
+
+  func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+    guard invalidatedServices.contains(where: { $0.uuid == serviceUUID }) else { return }
+    log("Peer GATT service changed; replacing the stale secure session")
+    closeClient(peripheral)
+    connected.removeValue(forKey: peripheral.identifier)
+    peers.remove(peripheral.identifier)
+    scheduleReconnect()
   }
 
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
@@ -1056,7 +1139,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   }
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-    guard error == nil else { log("Service discovery failed: \(error!.localizedDescription)"); return }
+    guard error == nil, peripheral.services?.contains(where: { $0.uuid == serviceUUID }) == true else {
+      log("Service discovery failed or Mesh service disappeared")
+      closeClient(peripheral); return
+    }
     for service in peripheral.services ?? [] where service.uuid == serviceUUID {
       peripheral.discoverCharacteristics([rxUUID, txUUID], for: service)
     }
@@ -1064,14 +1150,18 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService,
                   error: Error?) {
-    guard error == nil, let tx = service.characteristics?.first(where: { $0.uuid == txUUID }) else { log("Characteristic discovery failed"); return }
+    guard error == nil,
+          service.characteristics?.contains(where: { $0.uuid == rxUUID }) == true,
+          let tx = service.characteristics?.first(where: { $0.uuid == txUUID }) else {
+      log("Characteristic discovery failed"); closeClient(peripheral); return
+    }
     log("Subscribing to Android notifications")
     peripheral.setNotifyValue(true, for: tx)
   }
 
   func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic,
                   error: Error?) {
-    if let error { log("Notification subscription failed: \(error.localizedDescription)"); return }
+    if let error { log("Notification subscription failed: \(error.localizedDescription)"); closeClient(peripheral); return }
     if characteristic.uuid == txUUID, characteristic.isNotifying {
       log("Android notifications enabled")
       startClient(peripheral)
@@ -1118,7 +1208,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral,
                          didSubscribeTo characteristic: CBCharacteristic) {
-    if characteristic.uuid == txUUID { subscribers[central.identifier] = central }
+    if characteristic.uuid == txUUID {
+      subscribers[central.identifier] = central
+      serverHealth[central.identifier] = BleLinkHealth()
+    }
   }
   func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral,
                          didUnsubscribeFrom characteristic: CBCharacteristic) {

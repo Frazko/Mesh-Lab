@@ -1733,3 +1733,53 @@ había incorporado dependencias de pruebas mientras Gradle compilaba release.
 Se finalizaron todas las pruebas y se inició una nueva compilación release
 secuencial, regenerando el registro sin esos plugins de desarrollo. No se
 modificaron dependencias ni versiones para resolverlo.
+
+
+## 2026-09-22 — Recuperación de BLE tras reiniciar Convoy
+
+**81% global estimado · 78% comunicación; porcentajes sin cambio.**
+El usuario precisó que hay sólo dos teléfonos: iPhone mostraba «En red» y
+Android «Conectando». Los registros del A73 después de reinstalar mostraron
+conexiones GATT heredadas, sin escrituras de descriptor ni negociación Noise.
+La autenticación antigua del iPhone no tenía comprobación periódica de vida.
+Además, al desacoplar un motor Flutter Android no liberaba su propietario BLE,
+y una desconexión central podía dejar el vecino en la lista que impide reintentar.
+
+Cambios en el host del SDK, consumidos por la dependencia local de Convoy:
+
+- Ambos hosts comprueban respuestas autenticadas con reloj monótono: sondeo
+  cada 3 segundos y vencimiento tras 12 segundos sin prueba válida. También
+  vence una conexión que no termina de autenticar. Escribir correctamente al
+  sistema operativo no renueva la vida del vecino.
+- Los sondeos y sus respuestas pasan por la cola de registros en claro antes
+  del cifrado. Respetan el fragmento ATT en vuelo y adelantan la cola pendiente
+  de audio; no reordenan contadores Noise ni eliminan contenido pendiente.
+- iOS reinicia negociación ante invalidación del servicio y errores de
+  descubrimiento/suscripción. Android elimina vecinos estancados y cierra
+  GATT, publicidad y receiver al destruir su host, ignorando callbacks de
+  inicio que llegan después del cierre.
+- Desacoplar un motor Flutter deja de liberar el almacén nativo global que
+  otro motor puede seguir utilizando. La salida explícita del ámbito de
+  producto mantiene su propia limpieza.
+
+Validación automática: 17 pruebas Kotlin/JNI aprobadas y contrato Swift/FFI
+aprobado. Se prueban plazos, rechazo de progreso no autenticado, pares
+independientes, sesión nueva tras reinicio, sondeos durante una sesión larga y
+prioridad del sondeo entre registros de voz sin pérdida de fragmentos.
+La nueva política pura BleLinkHealth tiene cobertura de líneas 9/9 en Kotlin
+(JaCoCo, ramas 12/12) y 14/14 en Swift (LLVM). Esto NO equivale a cobertura del
+90% de todo el cambio: los callbacks de Android/CoreBluetooth requieren
+instrumentación física; el gate global de cobertura nativa sigue pendiente.
+Evidencia temporal: /tmp/mesh-ble-health-kotlin-coverage.log,
+/tmp/mesh-ble-health-swift.log y /tmp/mesh-ble-health-coverage/.
+
+Android Release compiló en 51,6 s y se instaló por USB en el A73. iOS Release
+compiló en 42,5 s y CoreDevice confirmó instalación en el iPhone a las 08:49.
+Se usó el perfil local BLE, sin entitlement Wi-Fi Aware en el artefacto iOS;
+el archivo fuente de entitlements quedó restaurado. No se instaló Debug.
+Android quedó abierto dentro de Testing. La evidencia física de las 08:48:49
+confirma descarte de los enlaces antiguos por falta de respuesta. Aún no se
+registra una negociación autenticada nueva tras ambas instalaciones: se pidió
+al usuario volver a Testing en iPhone. Pendientes: ambos semáforos En red,
+mensajes bidireccionales y reinicio de una app conservando la otra abierta.
+No se declara resuelta la prueba de reconexión física hasta observarla.

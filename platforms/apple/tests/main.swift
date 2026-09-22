@@ -1,5 +1,52 @@
 import Foundation
 
+let stalledHealth = BleLinkHealth(now: 0)
+stalledHealth.received(now: 11, authenticated: false)
+assert(!stalledHealth.probeDue(now: 11))
+assert(!stalledHealth.expired(now: 11.999))
+assert(stalledHealth.expired(now: 12))
+let healthyBle = BleLinkHealth(now: 0)
+healthyBle.received(now: 1, authenticated: true)
+assert(!healthyBle.probeDue(now: 2.999))
+for time in stride(from: 3.0, through: 60.0, by: 3.0) {
+  assert(healthyBle.probeDue(now: time))
+  assert(!healthyBle.probeDue(now: time + 0.001))
+  healthyBle.received(now: time + 0.1, authenticated: true)
+  assert(!healthyBle.expired(now: time + 11.999))
+}
+assert(healthyBle.expired(now: 72.101))
+assert(!healthyBle.probeDue(now: 72.101))
+let replacementBle = BleLinkHealth(now: 72)
+assert(!replacementBle.probeDue(now: 75))
+replacementBle.received(now: 75, authenticated: true)
+assert(replacementBle.probeDue(now: 75))
+assert(stalledHealth.expired(now: 75))
+assert(!BleLinkHealth().expired(now: ProcessInfo.processInfo.systemUptime))
+print("PASS: BLE liveness deadlines, authenticated progress, probes and independent reconnection")
+
+let probeScheduler = DurableRecordHistory()
+let probeWrites = BleWriteQueue()
+let probeReceiver = BleFrameCodec.Assembler()
+let probeVoice = (0...2).map { index in (0..<4096).map { UInt8(truncatingIfNeeded: $0 + index) } }
+let healthProbe: [UInt8] = [0x7d, 0, 0, 0, 1]
+probeScheduler.enqueue(probeVoice)
+probeWrites.append(BleFrameCodec.split(probeScheduler.next()!, maximumWrite: 185)!)
+assert(probeReceiver.accept(probeWrites.begin()!) == nil)
+probeScheduler.enqueue([healthProbe])
+assert(probeWrites.begin() == nil)
+probeWrites.complete()
+var probeReceived = [[UInt8]]()
+while true {
+  if probeWrites.idle {
+    guard let record = probeScheduler.next() else { break }
+    probeWrites.append(BleFrameCodec.split(record, maximumWrite: 185)!)
+  }
+  if let record = probeReceiver.accept(probeWrites.begin()!) { probeReceived.append(record) }
+  probeWrites.complete()
+}
+assert(probeReceived == [probeVoice[0], healthProbe, probeVoice[1], probeVoice[2]])
+print("PASS: BLE health probes preserve the in-flight frame and overtake queued voice records")
+
 // Exercise the actual Swift FFI copy boundary, not merely fragmentation.
 // Before the fix Rust committed these notes, then Swift threw them away at
 // the 4163-byte link limit and the durable store would not emit them again.

@@ -26,6 +26,8 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
@@ -76,6 +78,19 @@ internal class BluetoothAccess(
     private var advertiser: BluetoothLeAdvertiser? = null
     private var gattServer: BluetoothGattServer? = null
     private var requested = false
+    private val maintenanceHandler = Handler(Looper.getMainLooper())
+    private val clientHealth = mutableMapOf<BluetoothGatt, BleLinkHealth>()
+    private val serverHealth = mutableMapOf<String, BleLinkHealth>()
+    private val maintenance = object : Runnable {
+        override fun run() {
+            synchronized(this@BluetoothAccess) {
+                if (!requested) return
+                try { maintainLinks() }
+                catch (_: SecurityException) { stopDiscoveryInternal() }
+                maintenanceHandler.postDelayed(this, 1_000)
+            }
+        }
+    }
     private var scanning = false
     private var advertising = false
     // `addService` completes asynchronously. Advertising before this becomes
@@ -190,6 +205,7 @@ internal class BluetoothAccess(
         var presenceAnnounced: Boolean = false,
         var originOutboxDrained: Boolean = false,
         val durableHistory: DurableRecordHistory = DurableRecordHistory(),
+        var health: BleLinkHealth = BleLinkHealth(),
     )
 
     private data class AwarePeer(
@@ -204,6 +220,13 @@ internal class BluetoothAccess(
         activity = null
         permissionContinuation?.resume(Unit)
         permissionContinuation = null
+    }
+
+    @Synchronized fun dispose() {
+        requested = false
+        stopDiscoveryInternal()
+        detach()
+        context.applicationContext.unregisterReceiver(adapterStateReceiver)
     }
 
     @Synchronized fun info(): BluetoothInfo {
@@ -442,6 +465,8 @@ internal class BluetoothAccess(
     }
 
     private fun startDiscoveryInternal() {
+        maintenanceHandler.removeCallbacks(maintenance)
+        maintenanceHandler.postDelayed(maintenance, 1_000)
         val adapter = manager.adapter ?: return
         if (!hasPermissions() || !adapter.isEnabled || scanning || advertising) return
         peers.clear()
@@ -492,6 +517,8 @@ internal class BluetoothAccess(
     }
 
     private fun stopDiscoveryInternal() {
+        maintenanceHandler.removeCallbacks(maintenance)
+        clientHealth.clear(); serverHealth.clear()
         try { if (scanning) scanner?.stopScan(scanCallback) } catch (_: SecurityException) { }
         try { if (advertising) advertiser?.stopAdvertising(advertiseCallback) } catch (_: SecurityException) { }
         scanning = false
@@ -500,7 +527,11 @@ internal class BluetoothAccess(
         peers.clear()
         probes = 0
         clients.values.forEach { it.close() }
-        clients.clear(); serverDevices.clear(); serverWriteSizes.clear()
+        clients.clear()
+        for (device in serverDevices.values) {
+            try { gattServer?.cancelConnection(device) } catch (_: SecurityException) { }
+        }
+        serverDevices.clear(); serverWriteSizes.clear()
         // Wi-Fi Aware sockets share the authenticated session owner. They must
         // close with the Bluetooth session boundary too, especially on a
         // product-scope transition.
@@ -530,10 +561,13 @@ internal class BluetoothAccess(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             synchronized(this@BluetoothAccess) {
+                if (!requested || !scanning) return
                 if (peers.add(result.device.address)) {
-                    clients[result.device.address] = result.device.connectGatt(
+                    val gatt = result.device.connectGatt(
                         context, false, gattClientCallback, android.bluetooth.BluetoothDevice.TRANSPORT_LE,
                     )
+                    clients[result.device.address] = gatt
+                    clientHealth[gatt] = BleLinkHealth()
                 }
             }
         }
@@ -543,6 +577,7 @@ internal class BluetoothAccess(
         override fun onServiceAdded(status: Int, service: BluetoothGattService) {
             if (service.uuid != serviceUuid) return
             synchronized(this@BluetoothAccess) {
+                if (!requested || gattServer == null) return
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     Log.w(logTag, "Mesh Lab GATT service failed to start: $status")
                     stopDiscoveryInternal()
@@ -556,8 +591,10 @@ internal class BluetoothAccess(
         override fun onConnectionStateChange(device: android.bluetooth.BluetoothDevice, status: Int, newState: Int) {
             synchronized(this@BluetoothAccess) {
                 if (status == BluetoothGatt.GATT_SUCCESS && newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                    if (!requested) { gattServer?.cancelConnection(device); return }
                     peers.add(device.address); serverDevices[device.address] = device
                     serverWriteSizes[device.address] = legacyAttPayload
+                    serverHealth[device.address] = BleLinkHealth()
                 } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
                     peers.remove(device.address); serverDevices.remove(device.address); closeServer(device.address)
                 }
@@ -582,6 +619,7 @@ internal class BluetoothAccess(
                 // processes a notification generated by that write. Reply
                 // first; sending the Noise frame before this acknowledgement
                 // made the iPhone silently drop the entire response burst.
+                if (!requested) return
                 if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
                 if (!preparedWrite && offset == 0 && characteristic.uuid == rxUuid) {
                     Log.i(logTag, "GATT write from ${device.address}: ${value.size} bytes")
@@ -620,6 +658,8 @@ internal class BluetoothAccess(
             } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
                 synchronized(this@BluetoothAccess) {
                     clients.entries.removeIf { it.value == gatt }
+                    peers.remove(gatt.device.address)
+                    clientHealth.remove(gatt)
                     clientSessions.remove(gatt)?.let { NativeRuntime.releaseSession(it.handle) }
                     clientWrites.remove(gatt); inbound.remove("c:${gatt.device.address}")
                 }
@@ -665,6 +705,7 @@ internal class BluetoothAccess(
         }
     }
     private fun startClient(gatt: BluetoothGatt) {
+        if (!requested || !clientHealth.containsKey(gatt)) return
         if (clientSessions.containsKey(gatt)) return
         if (!hasGroup()) {
             enrollmentDetail = "Teléfono Mesh Lab encontrado. Incorporando el grupo por Bluetooth…"
@@ -675,7 +716,8 @@ internal class BluetoothAccess(
         }
         try {
             val handle = NativeRuntime.startSession(identity.groupMaterial(), true)
-            clientSessions[gatt] = SessionLink(handle, true, 0)
+            val health = clientHealth.getOrPut(gatt) { BleLinkHealth() }
+            clientSessions[gatt] = SessionLink(handle, true, 0, health = health)
             enqueueClient(gatt, listOf(NativeRuntime.sessionWrite(handle)))
         } catch (_: Exception) { gatt.disconnect() }
     }
@@ -689,7 +731,8 @@ internal class BluetoothAccess(
         try {
             if (link == null) {
                 val handle = NativeRuntime.startSession(identity.groupMaterial(), false)
-                link = SessionLink(handle, false, 0)
+                val health = serverHealth.getOrPut(device.address) { BleLinkHealth() }
+                link = SessionLink(handle, false, 0, health = health)
                 serverSessions[device.address] = link
             }
             when (link.stage) {
@@ -735,7 +778,9 @@ internal class BluetoothAccess(
     }
     private fun acceptProtected(link: SessionLink, raw: ByteArray) {
         val data = NativeRuntime.sessionReceive(link.handle, raw)
-        if (NativeRuntime.sessionAuthenticated(link.handle)) {
+        val authenticated = NativeRuntime.sessionAuthenticated(link.handle)
+        link.health.received(BleLinkHealth.now(), authenticated)
+        if (authenticated) {
             probes++
             Log.i(logTag, "Secure link authenticated")
             if (!link.originOutboxDrained) {
@@ -754,7 +799,9 @@ internal class BluetoothAccess(
             return
         }
         if (data.firstOrNull() == heartbeatMarker && data.size == receiptBytes) {
-            sendAwareControl(link, byteArrayOf(heartbeatAckMarker) + data.copyOfRange(1, receiptBytes))
+            val reply = byteArrayOf(heartbeatAckMarker) + data.copyOfRange(1, receiptBytes)
+            if (awarePeerFor(link) != null) sendAwareControl(link, reply)
+            else sendBleControl(link, reply)
             return
         }
         if (data.firstOrNull() == heartbeatAckMarker && data.size == receiptBytes) {
@@ -1529,14 +1576,56 @@ internal class BluetoothAccess(
             gattServer?.cancelConnection(device)
         }
     }
+    /** Heartbeats use the same plaintext scheduler as content, so they cannot
+     * reorder encrypted Noise counters or interrupt an in-flight voice frame. */
+    private fun sendBleControl(link: SessionLink, payload: ByteArray) {
+        link.durableHistory.enqueue(listOf(payload))
+        val gatt = clientSessions.entries.firstOrNull { it.value === link }?.key
+        if (gatt != null) {
+            clientWrites.getOrPut(gatt) { BleWriteQueue() }
+            pumpClient(gatt)
+            return
+        }
+        val address = serverSessions.entries.firstOrNull { it.value === link }?.key ?: return
+        val device = serverDevices[address] ?: return
+        serverWrites.getOrPut(address) { BleWriteQueue() }
+        pumpServer(device)
+    }
+
+    private fun maintainLinks() {
+        val now = BleLinkHealth.now()
+        for ((gatt, health) in clientHealth.toMap()) {
+            if (health.expired(now)) {
+                Log.i(logTag, "BLE peer stopped proving liveness; disconnecting stale client")
+                closeClient(gatt)
+                clients.remove(gatt.device.address); peers.remove(gatt.device.address)
+            } else if (health.probeDue(now)) {
+                clientSessions[gatt]?.let { sendBleControl(it, byteArrayOf(heartbeatMarker, 0, 0, 0, 1)) }
+            }
+        }
+        for ((address, health) in serverHealth.toMap()) {
+            if (health.expired(now)) {
+                Log.i(logTag, "BLE peer stopped proving liveness; disconnecting stale server")
+                closeServer(address)
+                serverDevices.remove(address)
+                peers.remove(address)
+            } else if (health.probeDue(now)) {
+                serverSessions[address]?.let { sendBleControl(it, byteArrayOf(heartbeatMarker, 0, 0, 0, 1)) }
+            }
+        }
+    }
+
     private fun closeClient(gatt: BluetoothGatt) {
+        clientHealth.remove(gatt)
         clientSessions.remove(gatt)?.let { NativeRuntime.releaseSession(it.handle) }
         clientWrites.remove(gatt); inbound.remove("c:${gatt.device.address}")
         gatt.disconnect()
     }
     private fun closeServer(address: String) {
+        serverHealth.remove(address)
         serverSessions.remove(address)?.let { NativeRuntime.releaseSession(it.handle) }
         serverWrites.remove(address); serverWriteSizes.remove(address); inbound.remove("s:$address")
+        serverDevices[address]?.let { gattServer?.cancelConnection(it) }
     }
     private val advertiseSettings = AdvertiseSettings.Builder()
         .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY).setConnectable(true).build()

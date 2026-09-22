@@ -312,8 +312,10 @@ class MeshHostPlugin : FlutterPlugin, ActivityAware, MeshHostApi {
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         MeshHostApi.setUp(binding.binaryMessenger, null)
         FieldSessionService.stop(appContext)
+        bluetooth.dispose()
         aware.dispose()
-        NativeRuntime.releaseStore()
+        // The store is process-scoped. Another Flutter engine (foreground or
+        // location service) may still own authenticated sessions using it.
     }
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         bluetooth.attach(binding.activity)
