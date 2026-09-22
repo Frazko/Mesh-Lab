@@ -1783,3 +1783,31 @@ registra una negociación autenticada nueva tras ambas instalaciones: se pidió
 al usuario volver a Testing en iPhone. Pendientes: ambos semáforos En red,
 mensajes bidireccionales y reinicio de una app conservando la otra abierta.
 No se declara resuelta la prueba de reconexión física hasta observarla.
+
+
+## 2026-09-22 — Reacciones y textos compactos sobre el avatar de Convoy
+
+**81% global estimado · 78% comunicación; porcentajes sin cambio.**
+El usuario reportó que la malla va bien y pidió ajustar la presentación de los
+mensajes en el mapa. La captura muestra Malla: En red, pero no sustituye la
+campaña pendiente de reinicio/reconexión y múltiples dispositivos.
+
+Convoy `0c57db7` elimina el contenedor de altura fija de 60 px y el ancho mínimo
+heredado que desplazaba los emojis hacia la izquierda. Reacciones y mensajes
+se centran sobre el remitente y su base se ancla al borde exterior blanco del
+avatar. Las burbujas se ajustan al texto, con 5 px de relleno vertical; conservan
+hasta dos líneas cuando el contenido lo necesita y crecen hacia arriba sin
+mover el marcador ni la coordenada GPS. El emoji utiliza interlineado compacto.
+No se modificó el transporte de Malla ni Internet.
+
+Validación: 12 pruebas de widgets/dominio aprobadas. La nueva prueba de geometría
+cubre cuatro reacciones, mensajes cortos, mensajes largos y escalas de texto
+1, 1.5 y 2; verifica el centro respecto al avatar, contacto con el borde blanco,
+altura sin espacio sobrante y conservación del ancla GPS. Cobertura diferencial
+de líneas instrumentadas: 7/7 (100%), LCOV en
+/tmp/convoy-marker-layout-lcov.info. Análisis sin errores ni advertencias; sólo
+una recomendación preexistente por referencia documental en AppTextStyles.
+Android Release compiló en 54,7 s e iOS Release en 51,5 s. Ambas versiones
+quedaron instaladas; Android volvió a Testing. iOS usa el perfil local BLE y
+el entitlement WFA del fuente quedó restaurado. No se instaló Debug. Falta
+revisión visual del usuario con mensajes y reacciones en los dispositivos.
