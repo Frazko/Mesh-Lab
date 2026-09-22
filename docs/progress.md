@@ -1423,3 +1423,25 @@ presencia firmada por miembro. El estado Malla actual es agregado para este
 teléfono y no permite afirmar cuál de hasta 50 participantes es alcanzable de
 forma directa o mediante saltos; esa distinción requiere un contrato SDK por
 participante y su TTL antes de convertirla en UI individual.
+
+## Transición de cámara entre participante y grupo
+
+**Actualizado: 2026-09-21. Plan completo: 81%; bloque de transición de cámara:
+90%.**
+
+Los controles de “mi ubicación” y “grupo” comparten ahora una transición de
+500 ms con curva `easeInOutCubic`. El movimiento interpola centro, zoom y
+rotación desde la pose visible, y una nueva pulsación cancela la animación
+anterior para que no se acumulen recorridos. El encuadre del grupo calcula
+primero la cámara que contiene los marcadores y su padding, y después se anima
+hasta ella; antes aplicaba `fitCamera` de inmediato y producía un salto frente
+al centrado individual.
+
+Pasaron 16 pruebas de cámara, controles y HUD. La prueba del contrato exige
+medio segundo, extremos exactos y progresión suave de la curva. También se
+generaron correctamente el APK Android release de 147,1 MB y la app iOS release
+de 83,6 MB. El entitlement Wi-Fi Aware quedó intacto en el código fuente; se
+retiró únicamente durante la firma del artefacto iOS local porque el perfil de
+provisión todavía no lo concede. Queda instalar en dispositivos y validar la
+sensación del movimiento a 60/120 Hz: no había Android visible por ADB y el
+iPhone aparecía no disponible al cerrar esta revisión física.
