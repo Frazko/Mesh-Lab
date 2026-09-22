@@ -1847,3 +1847,33 @@ las secciones más recientes de este archivo y por las pruebas en Convoy: no
 volver a presentar la inscripción remota o la voz bilateral como no implementadas.
 Siguiente paso recomendado: campaña reproducible de tres teléfonos para comprobar
 el salto y la convivencia Internet/Malla, antes de ampliar carga o radios.
+
+
+## 2026-09-22 — Infografía del cierre
+
+81% global estimado · 78% comunicación, sin cambios de alcance ni gates.
+Se generó y revisó visualmente la [infografía de pendientes](images/convoy-mesh-pendientes-2026-09-22.png), con los siete bloques abiertos y la prueba de tres teléfonos como siguiente paso. Se conserva el prompt junto a la imagen.
+
+
+## 2026-09-22 — Anclaje de reportes en vivo en Convoy
+
+**81% global estimado · 78% comunicación; sin cambio de gates.**
+Convoy `3749f87` coloca los reportes encima de su coordenada con
+`Alignment.topCenter` de FlutterMap. Se elimina el margen inferior sobrante:
+44 px de círculo + 10 px de triángulo = 54 px. La coordenada coincide así con
+la punta inferior de la V, no con el centro del marcador.
+
+La fábrica usada por la pantalla se valida en un FlutterMap real de widgets:
+los diez tipos de reporte, zooms 12/18 y rotaciones 0°/67°, verificando la punta
+transformada en pantalla contra la coordenada proyectada, con tolerancia <1 px.
+La animación de emergencia sólo escala el círculo; el extremo permanece fijo.
+También se verifica que tocar el marcador conserve el callback del detalle.
+Pasaron 13 pruebas, incluidas tres regresiones de burbujas/reacciones. La
+fábrica nueva tiene 4/4 líneas cubiertas; no se ejecutó la pantalla completa de
+Convoy en este test. Análisis sin errores ni warnings, con siete infos
+preexistentes. Evidencia: /tmp/convoy-report-tip-tests.log y
+/tmp/convoy-report-tip-lcov.info. Android Release compiló en 52,1 s e iOS Release en 51,3 s; ambas
+versiones quedaron instaladas. La UI de Android muestra Malla: En red después
+de la instalación. El entitlement WFA de fuente iOS quedó restaurado tras
+usar el perfil BLE local. No se instaló Debug. Siguiente paso: revisión visual
+de un reporte sobre su ubicación en los dispositivos.
