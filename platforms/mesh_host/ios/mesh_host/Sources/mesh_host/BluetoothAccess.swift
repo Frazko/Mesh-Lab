@@ -84,7 +84,12 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   // These records carry only public policy or a signed enrollment request. They
   // run before a protected session exists, then the normal Noise handshake takes
-  // over on the same GATT link. 0xf0 is outside the canonical Link record prefix.
+  // over on the same GATT link. The full domain prefix is required because an
+  // opaque Noise record can legitimately start with any single byte.
+  private let enrollmentDomain: [UInt8] = [
+    0x4d, 0x45, 0x53, 0x48, 0x2d, 0x45, 0x4e, 0x52,
+    0x4f, 0x4c, 0x4c, 0x2d, 0x76, 0x31, 0x00, 0x7f,
+  ]
   private let enrollmentHello: UInt8 = 0xf0
   private let enrollmentInvitation: UInt8 = 0xf1
   private let enrollmentRequest: UInt8 = 0xf2
@@ -222,7 +227,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     guard hasGroup else {
       log("Starting Bluetooth enrollment with \(peripheral.identifier.uuidString)")
       enrollmentDetail = "Teléfono Mesh Lab encontrado. Incorporando el grupo por Bluetooth…"
-      enqueueClient(peripheral, raw: [[enrollmentHello]])
+      enqueueClient(peripheral, raw: [enrollmentFrame(enrollmentHello, [])])
       return
     }
     guard let handle = runtime({ try NativeRuntime.shared.startSession(try SecureIdentity().groupMaterial(), initiator: true) }),
@@ -652,7 +657,8 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
 
   /// Returns true when the frame was reserved for the one-time public enrollment exchange.
   private func handleEnrollmentFromClient(_ raw: [UInt8], central: CBCentral) -> Bool {
-    guard let kind = raw.first, kind >= enrollmentHello, kind <= enrollmentPolicy else { return false }
+    guard let record = decodeEnrollmentFrame(raw) else { return false }
+    let kind = record.kind
     guard hasGroup else { return true }
     switch kind {
     case enrollmentHello:
@@ -662,7 +668,7 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
       enrollmentDetail = "Enviando invitación segura por Bluetooth…"
       enqueueServer(central, raw: [enrollmentFrame(enrollmentInvitation, policy)])
     case enrollmentRequest:
-      let request = Array(raw.dropFirst())
+      let request = record.payload
       guard !request.isEmpty, request.count <= 512 else { return true }
       guard enrollmentRequestAllowed(request) else {
         enrollmentDetail = "Solicitud no autorizada para este convoy."
@@ -682,9 +688,10 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   }
 
   private func handleEnrollmentFromServer(_ raw: [UInt8], peripheral: CBPeripheral) -> Bool {
-    guard let kind = raw.first, kind >= enrollmentHello, kind <= enrollmentPolicy else { return false }
+    guard let record = decodeEnrollmentFrame(raw) else { return false }
+    let kind = record.kind
     guard !hasGroup else { return true }
-    let payload = Array(raw.dropFirst())
+    let payload = record.payload
     switch kind {
     case enrollmentInvitation:
       guard let request = runtime({ try NativeRuntime.shared.createEnrollmentRequest(try SecureIdentity().groupMaterial(), invitation: payload) }) else {
@@ -707,8 +714,19 @@ final class BluetoothAccess: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private func enrollmentFrame(_ kind: UInt8, _ payload: [UInt8]) -> [UInt8] {
     // A two-phone group is well below this ceiling. The bound is also enforced
     // by BleFrameCodec before it reaches CoreBluetooth.
-    guard payload.count <= 4159 else { enrollmentDetail = "El grupo es demasiado grande para esta incorporación Bluetooth."; return [kind] }
-    return [kind] + payload
+    guard enrollmentDomain.count + 1 + payload.count <= 4160 else {
+      enrollmentDetail = "El grupo es demasiado grande para esta incorporación Bluetooth."
+      return enrollmentDomain + [kind]
+    }
+    return enrollmentDomain + [kind] + payload
+  }
+
+  private func decodeEnrollmentFrame(_ raw: [UInt8]) -> (kind: UInt8, payload: [UInt8])? {
+    guard raw.count >= enrollmentDomain.count + 1,
+          Array(raw.prefix(enrollmentDomain.count)) == enrollmentDomain else { return nil }
+    let kind = raw[enrollmentDomain.count]
+    guard kind >= enrollmentHello, kind <= enrollmentPolicy else { return nil }
+    return (kind, Array(raw.dropFirst(enrollmentDomain.count + 1)))
   }
   /// Installs the direct Wi‑Fi Aware payload path. The closure may return true
   /// only after a Noise-authenticated WFA link exists; scheduling a radio scan

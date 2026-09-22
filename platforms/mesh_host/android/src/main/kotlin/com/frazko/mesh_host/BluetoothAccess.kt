@@ -652,7 +652,9 @@ internal class BluetoothAccess(
         if (clientSessions.containsKey(gatt)) return
         if (!hasGroup()) {
             enrollmentDetail = "Teléfono Mesh Lab encontrado. Incorporando el grupo por Bluetooth…"
-            enqueueClient(gatt, listOf(byteArrayOf(enrollmentHello.toByte())))
+            EnrollmentRecordCodec.encode(EnrollmentRecordCodec.hello)?.let {
+                enqueueClient(gatt, listOf(it))
+            }
             return
         }
         try {
@@ -1166,12 +1168,12 @@ internal class BluetoothAccess(
 
     /** Handles public, one-time enrollment before a protected session exists. */
     private fun handleEnrollmentFromClient(raw: ByteArray, device: android.bluetooth.BluetoothDevice): Boolean {
-        val kind = raw.firstOrNull()?.toInt()?.and(255) ?: return false
-        if (kind !in enrollmentHello..enrollmentPolicy) return false
+        val record = EnrollmentRecordCodec.decode(raw) ?: return false
+        val kind = record.kind
         Log.i(logTag, "Enrollment record $kind from ${device.address}")
         if (!hasGroup()) return true
         when (kind) {
-            enrollmentHello -> {
+            EnrollmentRecordCodec.hello -> {
                 // A phone can arrive here after a failed session for a stale
                 // group. Its new enrollment must not reuse that old Noise
                 // handle when it starts the fresh handshake below.
@@ -1182,11 +1184,11 @@ internal class BluetoothAccess(
                 }
                 enrollmentDetail = "Enviando invitación segura por Bluetooth…"
                 Log.i(logTag, "Sending invitation to ${device.address}")
-                enrollmentFrame(enrollmentInvitation, policy)?.let { enqueueServer(device, listOf(it)) }
+                enrollmentFrame(EnrollmentRecordCodec.invitation, policy)?.let { enqueueServer(device, listOf(it)) }
             }
-            enrollmentRequest -> {
+            EnrollmentRecordCodec.request -> {
                 closeServer(device.address)
-                val request = raw.copyOfRange(1, raw.size)
+                val request = record.payload
                 if (request.isEmpty() || request.size > 512) return true
                 if (!enrollmentRequestAllowed(request)) {
                     enrollmentDetail = "Solicitud no autorizada para este convoy."
@@ -1209,25 +1211,25 @@ internal class BluetoothAccess(
                 onPolicyChanged()
                 enrollmentDetail = "Segundo teléfono autorizado por Bluetooth."
                 Log.i(logTag, "Sending enrolled policy to ${device.address}")
-                enrollmentFrame(enrollmentPolicy, policy)?.let { enqueueServer(device, listOf(it)) }
+                enrollmentFrame(EnrollmentRecordCodec.policy, policy)?.let { enqueueServer(device, listOf(it)) }
             }
         }
         return true
     }
 
     private fun handleEnrollmentFromServer(raw: ByteArray, gatt: BluetoothGatt): Boolean {
-        val kind = raw.firstOrNull()?.toInt()?.and(255) ?: return false
-        if (kind !in enrollmentHello..enrollmentPolicy) return false
+        val record = EnrollmentRecordCodec.decode(raw) ?: return false
+        val kind = record.kind
         if (hasGroup()) return true
-        val payload = raw.copyOfRange(1, raw.size)
+        val payload = record.payload
         when (kind) {
-            enrollmentInvitation -> {
+            EnrollmentRecordCodec.invitation -> {
                 val request = try { NativeRuntime.createEnrollmentRequest(identity.groupMaterial(), payload) }
                     catch (_: Exception) { enrollmentDetail = "No se pudo validar la invitación Bluetooth."; return true }
                 enrollmentDetail = "Solicitando incorporación al Android…"
-                enrollmentFrame(enrollmentRequest, request)?.let { enqueueClient(gatt, listOf(it)) }
+                enrollmentFrame(EnrollmentRecordCodec.request, request)?.let { enqueueClient(gatt, listOf(it)) }
             }
-            enrollmentPolicy -> {
+            EnrollmentRecordCodec.policy -> {
                 try { NativeRuntime.installPolicy(payload) }
                 catch (_: Exception) { enrollmentDetail = "Android entregó un grupo no válido."; return true }
                 onPolicyChanged()
@@ -1239,11 +1241,12 @@ internal class BluetoothAccess(
     }
 
     private fun enrollmentFrame(kind: Int, payload: ByteArray): ByteArray? {
-        if (payload.size > 4159) {
+        val frame = EnrollmentRecordCodec.encode(kind, payload)
+        if (frame == null) {
             enrollmentDetail = "El grupo es demasiado grande para esta incorporación Bluetooth."
             return null
         }
-        return byteArrayOf(kind.toByte()) + payload
+        return frame
     }
     @Synchronized fun sendText(text: String, logicalId: String): Boolean {
         val bytes = text.toByteArray(Charsets.UTF_8)
@@ -1511,10 +1514,6 @@ internal class BluetoothAccess(
     }
 
     private companion object {
-        const val enrollmentHello = 0xf0
-        const val enrollmentInvitation = 0xf1
-        const val enrollmentRequest = 0xf2
-        const val enrollmentPolicy = 0xf3
         const val voiceMarker: Byte = 0x56
         const val durableVoiceVersion: Byte = 2
         const val durableVoiceContextVersion: Byte = 3

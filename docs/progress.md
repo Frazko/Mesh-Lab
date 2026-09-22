@@ -1,8 +1,37 @@
 # Avance del plan
 
-Estado vigente: 2026-09-21. **78% global estimado · 90% Wi‑Fi Aware.**
+Estado vigente: 2026-09-21. **80% global estimado · 90% Wi‑Fi Aware.**
 
 La tabla inicial conserva la línea base del plan; las secciones fechadas posteriores y el [registro de huecos](known-gaps.md) describen el estado vigente y la evidencia pendiente.
+
+## Enlace BLE de Convoy y apertura del mapa
+
+**Actualizado: 2026-09-21. Plan completo: 80%; bloque físico y UI: 96%.**
+
+La campaña Android↔iPhone encontró y corrigió una colisión real del protocolo:
+la incorporación pública se reconocía por un solo byte y un registro Noise
+opaco de 32 bytes comenzó casualmente por `0xf3`. Android lo clasificó como una
+política y dejó la sesión en “Conectando”. Android e iOS ahora anteponen el
+mismo dominio versionado de 128 bits a los cuatro registros de incorporación;
+un paquete Noise ya no puede entrar por esa ruta por coincidencia de un byte.
+La nueva prueba Kotlin reproduce el registro de 39 bytes observado y exige que
+no sea inscripción, además de cubrir round-trip, corrupción y límites.
+
+Se compilaron e instalaron builds Release nuevos en el SM A736B y el iPhone. La
+evidencia física registró `Noise step 1`, `Noise step 2` y
+`Secure link authenticated`; Convoy mostró **Malla: En red** con un vecino BLE.
+La admisión de Convoy refresca el roster mientras hay servidor y el enlace sigue
+pendiente, de modo que el líder incorpora el binding del segundo teléfono sin
+reiniciar la sesión. La cápsula de Malla quedó centrada debajo del encabezado.
+
+El mapa abre con Centroamérica (`13.2, -85.7`, zoom `5.2`) y consume solamente
+la primera fijación local válida para animar al marcador propio. La prueba
+física sin señal GPS conservó correctamente la vista regional; las pruebas
+unitarias demuestran que una fijación nula o `(0,0)` no consume el latch y que
+las fijaciones posteriores no vuelven a mover el mapa. Aprobaron 39 pruebas
+cercanas de Convoy, la unidad nativa del protocolo y ambos builds Release. Falta
+validar visualmente la animación con señal GPS disponible y ampliar la campaña
+a corte/reconexión y multihop; por eso el bloque no se declara cerrado.
 
 ## Puente seguro Internet–Malla
 
@@ -1322,8 +1351,8 @@ Las pruebas Rust existentes protegen la prueba del SDK; Convoy añade contratos 
 
 ## Contrato de radios para aplicaciones consumidoras
 
-**Actualizado: 2026-09-21. Plan completo: 78%; bloque de prueba física:
-70%.**
+**Actualizado: 2026-09-21. Plan completo: 80%; bloque de prueba física:
+96%.**
 
 El plugin Android ahora exporta desde su propio manifiesto todos los permisos y
 features opcionales que necesita el host: BLE scan/connect/advertise, Nearby
@@ -1334,8 +1363,8 @@ haber omitido declaraciones duplicadas.
 
 El APK release de Convoy confirmó esas entradas en el manifiesto fusionado. En
 el SM A736B se instalaron y concedieron los permisos, y el registro nativo
-confirmó `Mesh Lab GATT service is ready` y `Mesh Lab advertising started`.
-Falta que el iPhone instalado acepte Bluetooth y entre al mismo convoy para
-cerrar el enlace físico. Wi-Fi Aware en la distribución iOS continúa como gate
-separado: el código y el entitlement están declarados, pero el perfil de
+confirmó `Mesh Lab GATT service is ready`, `Mesh Lab advertising started` y,
+con el iPhone en el mismo convoy, las dos etapas Noise y
+`Secure link authenticated`. Wi-Fi Aware en la distribución iOS continúa como
+gate separado: el código y el entitlement están declarados, pero el perfil de
 provisión actual de Convoy todavía no incluye la capacidad concedida por Apple.
