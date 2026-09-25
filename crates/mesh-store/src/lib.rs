@@ -143,7 +143,14 @@ fn logical_delivery_schema_hash() -> [u8; 32] {
     )
 }
 fn origin_receipt_ack_schema_hash() -> [u8; 32] {
-    digest([logical_delivery_schema_hash().as_slice(), ORIGIN_RECEIPT_ACK_SCHEMA.as_bytes()].concat().as_slice())
+    digest(
+        [
+            logical_delivery_schema_hash().as_slice(),
+            ORIGIN_RECEIPT_ACK_SCHEMA.as_bytes(),
+        ]
+        .concat()
+        .as_slice(),
+    )
 }
 mod authenticated;
 pub use authenticated::{ChunkStored, ReceiptCommit};
@@ -583,7 +590,8 @@ impl Store {
             tx.execute(
                 "UPDATE meta SET schema_hash=?1 WHERE singleton=1",
                 [&origin_receipt_ack_schema_hash()[..]],
-            ).map_err(sql)?;
+            )
+            .map_err(sql)?;
         }
         tx.commit().map_err(sql)?;
         Ok(Self {

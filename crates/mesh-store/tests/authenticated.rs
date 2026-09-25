@@ -59,7 +59,8 @@ fn version_ten_adds_ack_cache_without_losing_reserved_operations() {
     let files = Files::new();
     let path = files.path("version-ten.db");
     let db = rusqlite::Connection::open(&path).unwrap();
-    db.pragma_update(None, "key", format!("x'{}'", "07".repeat(32))).unwrap();
+    db.pragma_update(None, "key", format!("x'{}'", "07".repeat(32)))
+        .unwrap();
     let scripts = [
         include_str!("../../../schema/store/001.sql"),
         include_str!("../../../schema/store/002-authentication.sql"),
@@ -72,12 +73,20 @@ fn version_ten_adds_ack_cache_without_losing_reserved_operations() {
         include_str!("../../../schema/store/009-relay-receipt-acks.sql"),
         include_str!("../../../schema/store/010-logical-delivery.sql"),
     ];
-    for script in scripts { db.execute_batch(script).unwrap(); }
+    for script in scripts {
+        db.execute_batch(script).unwrap();
+    }
     let hash = digest(scripts.concat().as_bytes());
-    db.execute("INSERT INTO meta VALUES(1,?1,2,?2)",
-        rusqlite::params![&[1u8; 32][..], &hash[..]]).unwrap();
-    db.execute("INSERT INTO operations(id,command_hash,sequence) VALUES(?1,?2,1)",
-        rusqlite::params![&OP.0[..], &[0u8; 32][..]]).unwrap();
+    db.execute(
+        "INSERT INTO meta VALUES(1,?1,2,?2)",
+        rusqlite::params![&[1u8; 32][..], &hash[..]],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO operations(id,command_hash,sequence) VALUES(?1,?2,1)",
+        rusqlite::params![&OP.0[..], &[0u8; 32][..]],
+    )
+    .unwrap();
     drop(db);
     let mut store = open(&path, 1);
     assert_eq!(store.reserve(OP, [0; 32]).unwrap().sequence, 1);

@@ -2032,3 +2032,15 @@ The root, app, SDK, and native-host `THIRD_PARTY.md` files now use English
 prose while preserving dependency names, license URLs, paths, and legal terms.
 The remaining historical design and progress documents still require the same
 translation treatment before the repository-wide Markdown task is complete.
+
+## 2026-09-25 — CI repair started
+
+Plan Malla: 81% global estimated, unchanged. CI repair block: 50%.
+
+Reproduced the contracts failure locally with the pinned Rust 1.98.1 toolchain:
+`cargo fmt --all -- --check` reported stale formatting in `mesh-ffi-c` and
+`mesh-store`. Applied the formatter and confirmed the check passes locally.
+The Android workflow now installs Android command-line tools explicitly through
+`android-actions/setup-android@v3`, accepts licenses, and installs the pinned
+NDK before building. The Apple integration test remains to be verified by the
+next remote run.

@@ -418,14 +418,25 @@ impl Store {
         if signer.public_key() != roster.signing_key(self.member)? {
             return Err(DurableError::AuthenticationFailed);
         }
-        let receipt: Vec<u8> = self.db.query_row(
-            "SELECT receipt FROM target_receipts WHERE object_id=?1 AND actor=?2",
-            params![&object.0[..], &actor.0[..]], |row| row.get(0),
-        ).optional().map_err(sql)?.ok_or(DurableError::NotFound)?;
-        let cached: Option<Vec<u8>> = self.db.query_row(
-            "SELECT ack FROM origin_receipt_acks WHERE object_id=?1 AND actor=?2",
-            params![&object.0[..], &actor.0[..]], |row| row.get(0),
-        ).optional().map_err(sql)?;
+        let receipt: Vec<u8> = self
+            .db
+            .query_row(
+                "SELECT receipt FROM target_receipts WHERE object_id=?1 AND actor=?2",
+                params![&object.0[..], &actor.0[..]],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql)?
+            .ok_or(DurableError::NotFound)?;
+        let cached: Option<Vec<u8>> = self
+            .db
+            .query_row(
+                "SELECT ack FROM origin_receipt_acks WHERE object_id=?1 AND actor=?2",
+                params![&object.0[..], &actor.0[..]],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql)?;
         if let Some(ack) = cached {
             if protocol::verify_receipt_ack(&ack, roster, now).is_ok() {
                 return Ok(ack);
@@ -433,13 +444,21 @@ impl Store {
         }
         self.verify_target_receipt(object, &receipt, roster, now)?;
         let ack = protocol::issue_receipt_ack(
-            &receipt, object, self.member, actor, roster.scope(), signer, now,
+            &receipt,
+            object,
+            self.member,
+            actor,
+            roster.scope(),
+            signer,
+            now,
         )?;
-        self.db.execute(
-            "INSERT INTO origin_receipt_acks VALUES(?1,?2,?3) \
+        self.db
+            .execute(
+                "INSERT INTO origin_receipt_acks VALUES(?1,?2,?3) \
              ON CONFLICT(object_id,actor) DO UPDATE SET ack=excluded.ack",
-            params![&object.0[..], &actor.0[..], &ack],
-        ).map_err(sql)?;
+                params![&object.0[..], &actor.0[..], &ack],
+            )
+            .map_err(sql)?;
         Ok(ack)
     }
 
