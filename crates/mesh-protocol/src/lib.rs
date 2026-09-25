@@ -1471,7 +1471,9 @@ impl VerifiedReceiptAck {
     }
 }
 
-fn receipt_ack_parts(encoded: &[u8]) -> Result<(ReceiptAckRoute, Scope, u64, &[u8], [u8; 64])> {
+type ReceiptAckParts<'a> = (ReceiptAckRoute, Scope, u64, &'a [u8], [u8; 64]);
+
+fn receipt_ack_parts(encoded: &[u8]) -> Result<ReceiptAckParts<'_>> {
     let (body, signature) = signed_parts(encoded, MAX_RECEIPT_ACK)?;
     let mut r = Reader::new(body, MAX_RECEIPT_ACK)?;
     r.array(9)?;

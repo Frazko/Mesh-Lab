@@ -2617,6 +2617,13 @@ pub unsafe extern "C" fn mesh_secure_store_receipt_ack_record(
     });
     status(result, |buffer| unsafe { *out = buffer })
 }
+/// Returns the next durable relay record for a store handle.
+///
+/// # Safety
+///
+/// `out` must be a valid, writable, properly aligned pointer to a
+/// `MeshBuffer`. On success, callers own the returned buffer and must release
+/// it with the matching buffer-free function.
 #[no_mangle]
 pub unsafe extern "C" fn mesh_secure_store_relay_record(
     handle: u64,

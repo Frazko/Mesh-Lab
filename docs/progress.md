@@ -2044,3 +2044,8 @@ The Android workflow now installs Android command-line tools explicitly through
 `android-actions/setup-android@v3`, accepts licenses, and installs the pinned
 NDK before building. The Apple integration test remains to be verified by the
 next remote run.
+
+The first repaired run passed NDK setup and Rust formatting, then exposed a
+second Clippy gate. Local Clippy reproduced and passed after adding a named
+`ReceiptAckParts` alias for the complex return type and a `# Safety` section for
+the relay FFI function. Apple remains in progress on the remote run.
