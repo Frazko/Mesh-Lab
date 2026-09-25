@@ -65,42 +65,88 @@ Los documentos F0/F1 conservan valor histórico. Cuando contradicen el estado ac
 
 ## 3. Arquitectura del sistema
 
+El mapa describe **las fronteras y rutas de llamada del código actual dentro de un teléfono**. La app de laboratorio y una aplicación que use el SDK son consumidores alternativos; Android e iOS son implementaciones alternativas del host. No se ejecutan ambos hosts en un mismo teléfono.
+
+Las flechas indican llamadas hacia la capa que resuelve una operación. Los resultados y errores regresan al llamador; no se dibujan flechas inversas para evitar confundirlos con canales push. Las conexiones de radio sí intercambian datos en ambos sentidos. El diagrama no es un grafo exhaustivo de dependencias entre crates ni una garantía de funciones físicas ya certificadas.
+
 ```mermaid
 flowchart TD
-    Lab[App Mesh Lab · Flutter] --> LabAdapter[NativeLabSdk]
-    Product[Aplicación consumidora] --> SDK[Mesh Field SDK]
-    LabAdapter --> Pigeon[mesh_host · API Pigeon]
-    SDK --> Pigeon
-    Pigeon --> Android[Host Kotlin · Android]
-    Pigeon --> Apple[Host Swift · iOS]
-    Android --> JNI[JNI]
-    Apple --> CABI[ABI C]
-    JNI --> Rust[Motor Rust]
-    CABI --> Rust
-    Rust --> Store[SQLCipher · objetos y colas durables]
-    Android --> ARadio[BLE / Wi-Fi Aware]
-    Apple --> IRadio[BLE / Wi-Fi Aware]
+    subgraph DartLayer["Aplicación y adaptadores Dart"]
+        Lab["Mesh Lab: LabScreen + LabController"] --> LabAdapter["NativeLabSdk"]
+        Product["Aplicación consumidora"] --> SDK["FieldMeshClient"]
+        SDK --> Gateway["MeshHostGateway"]
+        LabAdapter --> API["MeshHostApi: binding Dart generado"]
+        Gateway --> API
+    end
+
+    API -->|"Pigeon / Flutter BasicMessageChannel"| Android["Host Android: Kotlin"]
+    API -->|"Pigeon / Flutter BasicMessageChannel"| Apple["Host iOS: Swift"]
+
+    Android --> ABridge["NativeRuntime + NativeBridge"]
+    ABridge --> JNI["mesh-ffi-jni: entrada JNI"]
+    Apple --> IBridge["NativeRuntime: import MeshEngine"]
+    IBridge --> CABI["mesh-ffi-c: funciones extern C"]
+    JNI -->|"llamadas Rust internas"| SharedFFI["mesh-ffi-c: funciones y registros compartidos"]
+    CABI --> SharedFFI
+    SharedFFI --> Core["Crates de protocolo, sesión, runtime y replicación"]
+    SharedFFI --> Store["mesh-store: transacciones y colas durables"]
+    Store --> DB["SQLCipher mediante rusqlite: base local cifrada"]
+
+    Android --> ARadio["BluetoothAccess + WifiAwareAccess"]
+    Apple --> IRadio["BluetoothAccess + WifiAwareAccess"]
+    ARadio --> ABridge
+    IRadio --> IBridge
+    ARadio <-->|"BLE / Wi-Fi Aware"| Peer["Teléfono vecino: otro host y motor"]
+    IRadio <-->|"BLE / Wi-Fi Aware"| Peer
+
+    Android --> AKeys["SecureIdentity: Android Keystore"]
+    Apple --> IKeys["SecureIdentity: Apple Keychain"]
 ```
 
-### 3.1 Flutter: intención y presentación
+`Host Android` y `Host iOS` agrupan `MeshHostPlugin` y la coordinación nativa. Los radios llaman al motor mediante `NativeRuntime`; Rust devuelve registros o decisiones que el host utiliza para operar las APIs del sistema. **Rust no abre directamente los radios.** SQLCipher es una biblioteca usada por el motor dentro del proceso, no un servidor externo.
 
-Flutter muestra estado y solicita operaciones. `LabController`, basado en `ChangeNotifier`, proyecta datos del host, gestiona el chat del laboratorio y consulta el progreso de entrega. La pantalla agrupa Red, GPS, Texto, Voz y Diagnóstico.
+Las flechas hacia el vecino representan transportes posibles, sujetos a hardware, permisos, firma y capacidades de la build. No afirman interoperabilidad Wi-Fi Aware entre todas las plataformas ni equivalencia de sus ejecutores de relay.
 
-La UI no valida firmas ni decide que un objeto está entregado porque un botón terminó de ejecutarse. Consulta el estado producido por las capas inferiores. La app sí captura ubicación y graba audio mediante plugins: la separación nativa del motor no implica que todo procesamiento de contenido esté fuera de Dart.
+### 3.1 Flutter: intención, contenido y presentación
 
-El chat del laboratorio conserva una proyección en `shared_preferences`. Esa proyección no sustituye al outbox SQLCipher ni demuestra que toda copia de contenido visible tenga el mismo cifrado que el almacén del motor.
+La ruta del laboratorio es `MeshLabApp → LabScreen/LabController → NativeLabSdk → MeshHostApi`. `LabController`, basado en `ChangeNotifier`, proyecta datos del host, gestiona el chat y consulta el progreso de entrega. La pantalla agrupa Red, GPS, Texto, Voz y Diagnóstico.
 
-### 3.2 Pigeon y hosts nativos
+La ruta de producto es `FieldMeshClient → FieldMeshGateway → MeshHostGateway → MeshHostApi`. `FieldMeshGateway` es la interfaz sustituible en pruebas; `MeshHostGateway` es su implementación nativa predeterminada. **Mesh Lab no llama a `FieldMeshClient`: utiliza directamente su adaptador `NativeLabSdk`.** Ambas rutas convergen en el mismo plugin `mesh_host`.
 
-El contrato fuente está en [mesh_api.dart](platforms/mesh_host/pigeons/mesh_api.dart). Pigeon genera bindings Dart, Kotlin y Swift; los tres deben mantenerse sincronizados.
+La UI no valida firmas ni declara entregado un objeto porque terminó una escritura. Consulta la evidencia producida por las capas inferiores. Sin embargo, Dart sí manipula contenido de aplicación: texto, coordenadas y audio comprimido saliente. No debe describirse esta arquitectura como si ningún payload atravesara Flutter.
 
-Los hosts poseen recursos con ciclo de vida del sistema operativo: descubrimiento, conexiones, sockets, colas de escritura, claves protegidas, reproducción y acceso al motor. Android entra por JNI; iOS, por la ABI C y `MeshEngine.xcframework`.
+Hay dependencias laterales del laboratorio, omitidas del mapa principal para mantener legible la ruta del motor:
 
-Un hot restart de Dart no equivale a terminar el proceso nativo. El runtime diagnóstico y los recursos del host tienen un ciclo de vida diferente al árbol de widgets. Al cambiar código Rust hay que reconstruir las bibliotecas y relanzar la aplicación: hot reload no reemplaza código nativo.
+| Dependencia | Uso real | Relación con la malla |
+|---|---|---|
+| `geolocator` | Obtener una fijación local desde `LabController` | La ubicación se codifica y se envía mediante `sendText` del host |
+| `record` | Grabar AAC/M4A desde `LabScreen` | Dart lee los bytes comprimidos y los pasa a `sendVoice` |
+| `shared_preferences` | Conservar la proyección del chat del laboratorio | No sustituye al outbox SQLCipher ni acredita entrega |
 
-### 3.3 Núcleo Rust
+Estos plugins acceden a sus propias implementaciones de plataforma. La captura de ubicación y grabación de voz no pasan por el motor Rust. La reproducción de voz recibida sí se solicita al host de malla. Las semillas privadas y los frames cifrados de radio permanecen fuera de la API Dart de producto.
 
-El workspace separa responsabilidades para probar reglas sin depender de radios:
+### 3.2 Pigeon, hosts y ejecución nativa
+
+El contrato fuente está en [mesh_api.dart](platforms/mesh_host/pigeons/mesh_api.dart). **Pigeon genera código; no es un servicio intermedio en ejecución.** Sus bindings Dart/Kotlin/Swift usan canales Flutter para despachar las operaciones a `MeshHostPlugin` y devolver resultados o errores.
+
+Los hosts poseen descubrimiento, conexiones, sockets, colas de escritura, acceso a claves protegidas, reproducción y handles del motor. Los handlers del plugin delegan según la operación: identidad y almacenamiento, diagnóstico, o adaptadores de radio. Un `sendText`, por ejemplo, entra en `BluetoothAccess` antes de que éste solicite persistencia y cifrado a Rust.
+
+La organización de los radios presenta una diferencia importante entre plataformas:
+
+- **Android:** `WifiAwareAccess` descubre y establece enlaces Aware; su callback `acceptSocket` entrega el socket a `BluetoothAccess.acceptAwareSocket`. A pesar de su nombre, `BluetoothAccess` también contiene ejecución de sesiones y contenido de esos sockets Aware.
+- **iOS:** `WifiAwareAccess` mantiene sus propias conexiones y sesiones Noise, operadas mediante `NativeRuntime`. `MeshHostPlugin` conecta ese adaptador con `BluetoothAccess` mediante callbacks: salida por `setAwarePayloadSender` y recepción por `setPayloadReceiver`/`acceptAwarePayload`. Comparten procesamiento de contenido, pero no un único propietario de todas las conexiones.
+
+Por tanto, la separación en “BLE” y “Aware” es útil para describir transportes, pero no significa que existan dos ejecutores totalmente independientes e idénticos en ambos sistemas.
+
+En Android, `NativeBridge` carga `libmesh_ffi_jni.so` y expone métodos JNI. **`mesh-ffi-jni` llama a funciones Rust de `mesh-ffi-c`**, reutilizando sus registros y operaciones; no carga una segunda biblioteca C independiente. En iOS, `NativeRuntime` importa `MeshEngine` y llama a las funciones `extern "C"` de `mesh-ffi-c`, empaquetadas en `MeshEngine.xcframework`. Ambos caminos convergen en la misma implementación compartida, aunque sus fronteras ABI sean distintas.
+
+`NativeRuntime` es código del host: un singleton Kotlin con dispatcher y un singleton Swift con cola serial. No es el crate `mesh-runtime`. El almacenamiento, las sesiones y el diagnóstico tienen handles y estados diferenciados; no existe un único objeto `mesh-runtime` por el que transiten obligatoriamente todas las operaciones durables.
+
+Un hot restart de Dart no equivale a terminar el proceso nativo. Tampoco implica que todos los adaptadores de radio sobrevivan a cualquier destrucción del plugin: Android libera sus adaptadores al desacoplar el engine Flutter y conserva el store de ámbito de proceso. Al cambiar Rust hay que reconstruir las bibliotecas y relanzar la app; hot reload no reemplaza código nativo.
+
+### 3.3 Núcleo Rust y persistencia
+
+El workspace separa responsabilidades para probar reglas sin depender de radios. Esta tabla es un inventario funcional, no una cadena de ejecución estrictamente secuencial:
 
 | Crate | Responsabilidad |
 |---|---|
@@ -110,14 +156,43 @@ El workspace separa responsabilidades para probar reglas sin depender de radios:
 | `mesh-crypto` | Primitivas de firma, cifrado y protección de claves de entrega |
 | `mesh-protocol` | Políticas, certificados, anuncios y recibos autenticados |
 | `mesh-session` | Handshake Noise, autenticación y protección contra replay |
-| `mesh-link` | Contratos y encuadre de enlace |
+| `mesh-link` | Encuadre acotado de registros, independiente del radio; no un driver BLE/Aware |
 | `mesh-runtime` | Transiciones de estado de diagnóstico, envío y recepción |
 | `mesh-store` | Persistencia SQLCipher, políticas y transacciones durables |
 | `mesh-replication` | Vecinos, presencia, deduplicación y reglas de relay/transporte |
-| `mesh-sim` | Escenarios sintéticos reproducibles |
-| `mesh-ffi-c` / `mesh-ffi-jni` | Fronteras de interoperabilidad con Swift/Kotlin |
+| `mesh-sim` | Herramientas y escenarios sintéticos de validación; no una capa del trayecto móvil |
+| `mesh-ffi-c` | Entrada ABI C, funciones Rust compartidas y registros de handles de runtime/store/sesión |
+| `mesh-ffi-jni` | Adaptación JNI de argumentos, resultados y errores para Android |
 
-El motor no abre por sí solo un radio Bluetooth del teléfono. Produce y valida decisiones y registros; los hosts ejecutan las operaciones físicas.
+`mesh-store` usa `rusqlite` con SQLCipher y proveedor criptográfico empaquetados. El host aporta la ruta y el material de apertura; Rust mantiene las transacciones y las reglas de persistencia. El cifrado del store no permite asumir que toda copia de contenido de la UI, archivo temporal o caché de reproducción esté dentro de esa base.
+
+Los adaptadores nativos ejecutan las acciones físicas y parte de la coordinación del transporte. La existencia de una política pura en Rust, por ejemplo selección de transporte por objeto, no demuestra que todos los hosts ya consuman esa decisión. Los pendientes del ejecutor siguen descritos en la sección 6 y en [relay-host-executor.md](docs/relay-host-executor.md).
+
+### 3.4 Recorrido de datos y observación de estado
+
+**Salida:** Dart entrega contenido e ID lógico al binding Pigeon; el plugin lo delega al ejecutor nativo. Éste solicita a Rust validar y persistir la operación, lee registros del outbox y solicita la protección de sesión antes de enviarlos mediante el transporte nativo correspondiente. El retorno de la operación indica admisión o rechazo, no entrega completa al destinatario.
+
+**Entrada:** un callback de radio entrega bytes al adaptador nativo. Mediante `NativeRuntime` y FFI se valida la sesión Noise; después se procesa el registro durable y se confirma el contenido cuando corresponde. El host proyecta resultados verificados en estado o colas de eventos. Dart consulta esas proyecciones mediante Pigeon; los bytes de radio no se enrutan a través del árbol de widgets.
+
+**Observación:** `FieldMeshClient.watch()` realiza consultas periódicas; las capacidades de recepción certificada drenan colas del host. `subscribe(cursor)` del contrato diagnóstico también devuelve un snapshot mediante una petición. Los nombres `watch` y `subscribe` no implican aquí un `EventChannel` ni un flujo push de frames desde Rust a Flutter.
+
+### 3.5 Evidencia del mapa
+
+Las relaciones principales se contrastaron con estos puntos de entrada del checkout:
+
+| Relación | Evidencia en código |
+|---|---|
+| App → `NativeLabSdk` | [main.dart](app/lib/main.dart) crea `LabScreen` con ese adaptador por defecto |
+| `NativeLabSdk` → `MeshHostApi` | [lab_controller.dart](app/lib/core/sdk/lab_controller.dart) delega cada operación a `_api` |
+| SDK → gateway → Pigeon | [field_mesh_client.dart](packages/mesh_field_sdk/lib/src/field_mesh_client.dart) construye `MeshHostGateway` por defecto y éste usa `MeshHostApi` |
+| Despacho Android y conexión entre radios | [MeshHostPlugin.kt](platforms/mesh_host/android/src/main/kotlin/com/frazko/mesh_host/MeshHostPlugin.kt) registra la API y conecta `acceptSocket` |
+| Despacho iOS y callbacks Aware | [MeshHostPlugin.swift](platforms/mesh_host/ios/mesh_host/Sources/mesh_host/MeshHostPlugin.swift) registra la API y conecta los callbacks de contenido |
+| Android → JNI → funciones compartidas | [NativeBridge.kt](platforms/mesh_host/android/src/main/kotlin/com/frazko/mesh_host/NativeBridge.kt) y [mesh-ffi-jni](crates/mesh-ffi-jni/src/lib.rs) |
+| iOS → ABI C | [NativeRuntime.swift](platforms/mesh_host/ios/mesh_host/Sources/mesh_host/NativeRuntime.swift) invoca funciones `mesh_*` |
+| Handles y operaciones compartidas | [mesh-ffi-c](crates/mesh-ffi-c/src/lib.rs) mantiene registros y llama a los módulos del motor |
+| Store → SQLCipher | [mesh-store/Cargo.toml](crates/mesh-store/Cargo.toml) y [mesh-store/src/lib.rs](crates/mesh-store/src/lib.rs) |
+
+Esta revisión acredita la correspondencia del mapa con las fuentes examinadas. La corrección funcional bajo cortes, concurrencia o segundo plano requiere las pruebas correspondientes; no se deduce de un diagrama correcto.
 
 ## 4. Identidad, grupos y seguridad
 

@@ -1895,3 +1895,26 @@ laboratorio e integración externa. Se comprobaron ausencia del nombre retirado
 en el README, enlaces locales, índice y bloques de código. No se modificaron
 código funcional, licencias ni visibilidad. Las otras guías históricas quedan
 fuera de esta edición del README.
+
+
+## 2026-09-25 — Contraste del mapa de arquitectura con código
+
+Plan Malla: 81% global estimado, sin cambio de gates. Revisión de arquitectura:
+100% (rutas Dart 20%, hosts/radios 30%, JNI/ABI C/store 30%, corrección y
+verificación documental 20%).
+
+Se contrastó la sección 3 con main.dart, LabController/NativeLabSdk,
+FieldMeshClient/MeshHostGateway, bindings Pigeon, plugins Kotlin/Swift,
+BluetoothAccess/WifiAwareAccess, NativeRuntime, NativeBridge, mesh-ffi-jni,
+mesh-ffi-c y mesh-store. El mapa incorpora el gateway omitido y la reutilización
+de funciones de mesh-ffi-c por JNI. Distingue alternativas de plataforma,
+llamadas/resultados y radio bidireccional; aclara captura por plugins laterales,
+consultas periódicas y separación entre NativeRuntime y el crate mesh-runtime.
+Se explican las diferencias de propiedad de sockets/sesiones Aware entre hosts
+y se añaden referencias de fuente para las relaciones principales.
+
+Validación: cambio del README limitado a la sección 3, enlaces locales e índice
+resueltos, fences equilibrados y diff sin errores de whitespace. No se ejecutó
+una campaña física ni se renderizó Mermaid con un motor externo; no se presentan
+esos gates como aprobados. Licencia y visibilidad no se modifican. Las notas
+locales preexistentes de progreso se conservan fuera del commit de esta revisión.
