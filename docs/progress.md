@@ -2022,3 +2022,13 @@ were already in English. The root README retains exact Spanish UI labels in
 parentheses where they identify controls that are still Spanish in the app.
 No Spanish prose remains in the repository README files, and `git diff --check`
 passes. Functional gates and source behavior were not changed.
+
+## 2026-09-25 — Third-party notices translated to English
+
+Plan Malla: 81% global estimated, unchanged. Markdown translation block: 25%
+(all four third-party notice copies translated 15%, repository inventory 10%).
+
+The root, app, SDK, and native-host `THIRD_PARTY.md` files now use English
+prose while preserving dependency names, license URLs, paths, and legal terms.
+The remaining historical design and progress documents still require the same
+translation treatment before the repository-wide Markdown task is complete.
