@@ -1918,3 +1918,23 @@ resueltos, fences equilibrados y diff sin errores de whitespace. No se ejecutó
 una campaña física ni se renderizó Mermaid con un motor externo; no se presentan
 esos gates como aprobados. Licencia y visibilidad no se modifican. Las notas
 locales preexistentes de progreso se conservan fuera del commit de esta revisión.
+
+
+## 2026-09-25 — Legibilidad del mapa de arquitectura
+
+Plan Malla: 81% global estimado, sin cambio de gates. Bloque de legibilidad:
+100% (reorganización 60%, render y revisión visual 30%, alcance/enlaces 10%).
+
+El mapa inicial de la sección 3 se separó en una vista vertical de llamadas
+Flutter/hosts/Rust y una vista horizontal del intercambio de radio. Las claves
+protegidas se muestran en tabla, eliminando sus conexiones largas. Se conservan
+las convergencias JNI/ABI C, los límites del host y las condiciones de radio.
+El texto desde 3.1 y el resto del README permanecen sin cambios.
+
+Ambos diagramas se renderizaron correctamente mediante Mermaid CLI en un
+directorio temporal externo al proyecto y se inspeccionaron como PNG: nodos y
+etiquetas legibles, sin cruces de aristas ni recortes. Artefactos locales de
+revisión: /tmp/mesh-diagram-review/architecture-1.png y architecture-2.png.
+Se verificaron enlaces locales y ausencia del nombre de producto retirado del
+README. No se modificaron dependencias del proyecto, código, licencia ni
+visibilidad. No se ejecutaron pruebas físicas para este cambio de presentación.

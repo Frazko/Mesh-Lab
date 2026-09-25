@@ -67,45 +67,69 @@ Los documentos F0/F1 conservan valor histórico. Cuando contradicen el estado ac
 
 El mapa describe **las fronteras y rutas de llamada del código actual dentro de un teléfono**. La app de laboratorio y una aplicación que use el SDK son consumidores alternativos; Android e iOS son implementaciones alternativas del host. No se ejecutan ambos hosts en un mismo teléfono.
 
-Las flechas indican llamadas hacia la capa que resuelve una operación. Los resultados y errores regresan al llamador; no se dibujan flechas inversas para evitar confundirlos con canales push. Las conexiones de radio sí intercambian datos en ambos sentidos. El diagrama no es un grafo exhaustivo de dependencias entre crates ni una garantía de funciones físicas ya certificadas.
+La arquitectura se muestra en dos vistas: **la ruta de llamadas al motor** y **el intercambio por radio**. Separarlas evita mezclar las dependencias internas con los enlaces entre teléfonos. Las claves protegidas se resumen en una tabla independiente.
+
+**Vista A · De la aplicación al motor y al almacenamiento**
+
+Las flechas indican llamadas; resultados y errores regresan por la misma ruta. Pigeon genera los bindings que se comunican mediante `Flutter BasicMessageChannel`, no un servicio adicional.
 
 ```mermaid
-flowchart TD
-    subgraph DartLayer["Aplicación y adaptadores Dart"]
-        Lab["Mesh Lab: LabScreen + LabController"] --> LabAdapter["NativeLabSdk"]
+flowchart TB
+    subgraph DartLayer["1 · Flutter / Dart"]
+        Lab["Mesh Lab<br/>LabScreen + LabController"] --> LabAdapter["NativeLabSdk"]
         Product["Aplicación consumidora"] --> SDK["FieldMeshClient"]
         SDK --> Gateway["MeshHostGateway"]
-        LabAdapter --> API["MeshHostApi: binding Dart generado"]
+        LabAdapter --> API["MeshHostApi<br/>Binding Pigeon"]
         Gateway --> API
     end
 
-    API -->|"Pigeon / Flutter BasicMessageChannel"| Android["Host Android: Kotlin"]
-    API -->|"Pigeon / Flutter BasicMessageChannel"| Apple["Host iOS: Swift"]
+    subgraph NativeLayer["2 · Host nativo · una plataforma por teléfono"]
+        Android["Android · Kotlin<br/>MeshHostPlugin"] --> ABridge["NativeRuntime<br/>+ NativeBridge"]
+        ABridge --> JNI["mesh-ffi-jni"]
+        Apple["iOS · Swift<br/>MeshHostPlugin"] --> IBridge["NativeRuntime<br/>import MeshEngine"]
+        IBridge --> CABI["Entrada ABI C"]
+    end
 
-    Android --> ABridge["NativeRuntime + NativeBridge"]
-    ABridge --> JNI["mesh-ffi-jni: entrada JNI"]
-    Apple --> IBridge["NativeRuntime: import MeshEngine"]
-    IBridge --> CABI["mesh-ffi-c: funciones extern C"]
-    JNI -->|"llamadas Rust internas"| SharedFFI["mesh-ffi-c: funciones y registros compartidos"]
+    subgraph EngineLayer["3 · Implementación Rust compartida"]
+        SharedFFI["mesh-ffi-c<br/>Funciones y registros compartidos"]
+        SharedFFI --> Core["Protocolo · sesión<br/>runtime · replicación"]
+        SharedFFI --> Store["mesh-store<br/>Transacciones y colas"]
+        Store --> DB["rusqlite + SQLCipher<br/>Base local cifrada"]
+    end
+
+    API --> Android
+    API --> Apple
+    JNI --> SharedFFI
     CABI --> SharedFFI
-    SharedFFI --> Core["Crates de protocolo, sesión, runtime y replicación"]
-    SharedFFI --> Store["mesh-store: transacciones y colas durables"]
-    Store --> DB["SQLCipher mediante rusqlite: base local cifrada"]
-
-    Android --> ARadio["BluetoothAccess + WifiAwareAccess"]
-    Apple --> IRadio["BluetoothAccess + WifiAwareAccess"]
-    ARadio --> ABridge
-    IRadio --> IBridge
-    ARadio <-->|"BLE / Wi-Fi Aware"| Peer["Teléfono vecino: otro host y motor"]
-    IRadio <-->|"BLE / Wi-Fi Aware"| Peer
-
-    Android --> AKeys["SecureIdentity: Android Keystore"]
-    Apple --> IKeys["SecureIdentity: Apple Keychain"]
 ```
 
-`Host Android` y `Host iOS` agrupan `MeshHostPlugin` y la coordinación nativa. Los radios llaman al motor mediante `NativeRuntime`; Rust devuelve registros o decisiones que el host utiliza para operar las APIs del sistema. **Rust no abre directamente los radios.** SQLCipher es una biblioteca usada por el motor dentro del proceso, no un servidor externo.
+Android entra por JNI y reutiliza funciones Rust de `mesh-ffi-c`; iOS llama a sus funciones `extern "C"` mediante el XCFramework. Los dos caminos convergen en la implementación compartida. SQLCipher se ejecuta dentro del proceso: no es un servidor externo.
 
-Las flechas hacia el vecino representan transportes posibles, sujetos a hardware, permisos, firma y capacidades de la build. No afirman interoperabilidad Wi-Fi Aware entre todas las plataformas ni equivalencia de sus ejecutores de relay.
+La vista agrupa la coordinación del host para mostrar sus fronteras. Algunas operaciones pasan primero por el ejecutor de radio —por ejemplo, `sendText`— antes de llamar a `NativeRuntime`, como se detalla en 3.2. Las flechas no representan un grafo completo de dependencias entre crates.
+
+**Vista B · Radio y ejecución de una sesión**
+
+Esta vista amplía el host nativo anterior. Representa un teléfono local y un vecino; no añade un segundo motor dentro del teléfono.
+
+```mermaid
+flowchart LR
+    Peer["Teléfono vecino"] <-->|"BLE / Wi-Fi Aware"| Radio["Adaptadores nativos<br/>BluetoothAccess<br/>WifiAwareAccess"]
+    Radio -->|"Solicita validar o cifrar"| Runtime["NativeRuntime<br/>Puente de la plataforma"]
+    Runtime -->|"JNI o ABI C"| Engine["Motor Rust<br/>Sesiones y objetos durables"]
+```
+
+Los callbacks del sistema entregan datos a los adaptadores. Éstos llaman a Rust por el puente nativo y utilizan sus resultados para transmitir o procesar contenido. **Rust no abre directamente los radios y los frames de radio no pasan por Dart.**
+
+El enlace con el vecino depende de hardware, permisos, firma y capacidades de la build. El diagrama no afirma interoperabilidad Wi-Fi Aware entre todas las plataformas ni equivalencia de sus ejecutores de relay; las diferencias Android/iOS se explican en 3.2.
+
+**Claves protegidas · responsabilidad del host**
+
+| Plataforma | Componente nativo | Protección persistente |
+|---|---|---|
+| Android | `SecureIdentity` | Android Keystore protege el material privado almacenado |
+| iOS | `SecureIdentity` | Apple Keychain conserva el material privado |
+
+El host aporta a las operaciones Rust el material necesario. Las semillas privadas no se exponen al SDK Dart. La protección persistente no significa que todas las operaciones criptográficas ocurran dentro de hardware seguro.
 
 ### 3.1 Flutter: intención, contenido y presentación
 
