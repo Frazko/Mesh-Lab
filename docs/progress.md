@@ -1877,3 +1877,18 @@ versiones quedaron instaladas. La UI de Android muestra Malla: En red después
 de la instalación. El entitlement WFA de fuente iOS quedó restaurado tras
 usar el perfil BLE local. No se instaló Debug. Siguiente paso: revisión visual
 de un reporte sobre su ubicación en los dispositivos.
+
+
+## 2026-09-25 — README independiente del producto consumidor
+
+Plan Malla: 81% global estimado, sin cambio de gates. Ajuste documental: 100%;
+entrega remota: pendiente de confirmar push. Base del bloque: redacción 60%,
+validación documental 20% y push verificado 20%.
+
+Se revisó el README técnico solicitado como primera entrega para sustituir las
+referencias nominales al producto consumidor por descripciones genéricas. Se
+conservan arquitectura, límites, evidencia y distinción entre pruebas del
+laboratorio e integración externa. Se comprobaron ausencia del nombre retirado
+en el README, enlaces locales, índice y bloques de código. No se modificaron
+código funcional, licencias ni visibilidad. Las otras guías históricas quedan
+fuera de esta edición del README.
