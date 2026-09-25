@@ -2,102 +2,102 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-Laboratorio móvil y núcleo de comunicación cercana para intercambiar **texto, ubicación y notas de voz entre teléfonos**, mediante enlaces autenticados y almacenamiento durable, sin exigir una conexión a Internet para el transporte local.
+A mobile laboratory and nearby communication core for exchanging **text, location, and voice notes between phones**, using authenticated links and durable storage without requiring an Internet connection for local transport.
 
-El proyecto reúne una aplicación Flutter de pruebas, hosts nativos Android/iOS, un motor Rust compartido y una fachada Flutter reutilizable: **Mesh Field SDK**. Otras aplicaciones pueden consumir esa infraestructura mediante el SDK. Una de las aplicaciones que utiliza esta tecnología es **[Convoy Offroad](https://theconvoyapp.com)**.
+The project combines a Flutter test application, native Android/iOS hosts, a shared Rust engine, and a reusable Flutter interface: **Mesh Field SDK**. Other applications can use this infrastructure through the SDK. One application using this technology is **[Convoy Offroad](https://theconvoyapp.com)**.
 
-**Estado documental: 25 de septiembre de 2026. Avance global estimado del plan Malla: 81%; Wi-Fi Aware: 90%; comunicación: 78%.** Son estimaciones del seguimiento, no porcentajes de cobertura de pruebas ni certificaciones de funcionamiento. Esta documentación no modifica esos gates. La evidencia física y los pendientes están en [docs/progress.md](docs/progress.md), especialmente en sus secciones recientes.
+**Documentation status: September 25, 2026. Estimated overall Mesh plan progress: 81%; Wi-Fi Aware: 90%; communication: 78%.** These are tracking estimates, not test coverage percentages or certifications of functionality. This documentation does not change those gates. Physical evidence and outstanding work are recorded in [docs/progress.md](docs/progress.md), particularly its recent entries.
 
-## Índice
+## Contents
 
-1. [Qué es y qué problema resuelve](#1-qué-es-y-qué-problema-resuelve)
-2. [Estado real y alcance](#2-estado-real-y-alcance)
-3. [Arquitectura del sistema](#3-arquitectura-del-sistema)
-4. [Identidad, grupos y seguridad](#4-identidad-grupos-y-seguridad)
-5. [Descubrimiento, radios y sesiones](#5-descubrimiento-radios-y-sesiones)
-6. [Entrega durable y múltiples saltos](#6-entrega-durable-y-múltiples-saltos)
-7. [Tipos de contenido y límites](#7-tipos-de-contenido-y-límites)
-8. [Preparación y compilación](#8-preparación-y-compilación)
-9. [Cómo usar la aplicación](#9-cómo-usar-la-aplicación)
-10. [Cómo integrar el SDK](#10-cómo-integrar-el-sdk)
-11. [Pruebas y evidencia](#11-pruebas-y-evidencia)
-12. [Diagnóstico de problemas](#12-diagnóstico-de-problemas)
-13. [Mapa del repositorio](#13-mapa-del-repositorio)
-14. [Pendientes y documentación de referencia](#14-pendientes-y-documentación-de-referencia)
-15. [Glosario](#15-glosario)
-16. [Licencia y reconocimiento](#16-licencia-y-reconocimiento)
+1. [What it is and what it solves](#1-what-it-is-and-what-it-solves)
+2. [Current status and scope](#2-current-status-and-scope)
+3. [System architecture](#3-system-architecture)
+4. [Identity, groups, and security](#4-identity-groups-and-security)
+5. [Discovery, radios, and sessions](#5-discovery-radios-and-sessions)
+6. [Durable delivery and multiple hops](#6-durable-delivery-and-multiple-hops)
+7. [Content types and limits](#7-content-types-and-limits)
+8. [Setup and builds](#8-setup-and-builds)
+9. [Using the application](#9-using-the-application)
+10. [Integrating the SDK](#10-integrating-the-sdk)
+11. [Testing and evidence](#11-testing-and-evidence)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Repository layout](#13-repository-layout)
+14. [Open work and reference documentation](#14-open-work-and-reference-documentation)
+15. [Glossary](#15-glossary)
+16. [License and attribution](#16-license-and-attribution)
 
-## 1. Qué es y qué problema resuelve
+## 1. What it is and what it solves
 
-Mesh Lab permite desarrollar y observar un sistema de comunicación entre dispositivos cercanos cuando la conexión a un servidor no está disponible o resulta intermitente. Cada teléfono puede originar contenido, recibirlo y, cuando el ejecutor y los enlaces lo permiten, custodiarlo y reenviarlo a otros miembros del grupo.
+Mesh Lab supports the development and observation of a nearby device communication system when connectivity to a server is unavailable or intermittent. Each phone can originate and receive content and, where its executor and links permit, take custody of it and forward it to other group members.
 
-La palabra *mesh* describe la posibilidad de formar una red de vecinos y transportar contenido por varios saltos. No significa que todos los teléfonos estén conectados directamente entre sí. Tampoco convierte al teléfono en un punto de acceso general a Internet: el relevo de acciones a un servidor es otra función, con autorización, firma e idempotencia propias.
+The word *mesh* describes the ability to form a network of neighbors and carry content across multiple hops. It does not mean every phone is directly connected to every other phone. Nor does it turn a phone into a general Internet access point: relaying actions to a server is a separate function with its own authorization, signatures, and idempotency.
 
-El repositorio tiene cuatro responsabilidades principales:
+The repository has four main responsibilities:
 
-| Componente | Para qué sirve | Consumidor |
+| Component | Purpose | Consumer |
 |---|---|---|
-| Aplicación Mesh Lab | Operar los radios, enviar contenido y observar estados durante QA | Desarrollador o persona que prueba teléfonos |
-| Motor Rust | Aplicar contratos, criptografía, persistencia y reglas de replicación | Hosts nativos |
-| Plugin `mesh_host` | Unir Flutter con Rust y controlar las APIs del sistema operativo | App de laboratorio y SDK |
-| `mesh_field_sdk` | Ofrecer operaciones de producto sin exponer topología ni claves | Aplicaciones consumidoras |
+| Mesh Lab application | Operate radios, send content, and observe state during QA | Developers and people testing phones |
+| Rust engine | Enforce contracts, cryptography, persistence, and replication rules | Native hosts |
+| `mesh_host` plugin | Connect Flutter to Rust and control operating system APIs | Lab app and SDK |
+| `mesh_field_sdk` | Provide product operations without exposing topology or keys | Consuming applications |
 
-La app del laboratorio usa directamente `mesh_host` mediante `NativeLabSdk`. El SDK de producto también usa ese plugin mediante `MeshHostGateway`. Son dos consumidores de la misma infraestructura, con interfaces y reglas de presentación distintas.
+The lab app uses `mesh_host` directly through `NativeLabSdk`. The product SDK also uses that plugin through `MeshHostGateway`. They are two consumers of the same infrastructure, with different interfaces and presentation rules.
 
-Un ejemplo de uso es un grupo de vehículos: un integrante envía su posición o una nota de voz, un vecino la recibe por radio y el sistema registra qué destinatarios confirmaron el objeto. La interpretación como vehículo, chat, mapa o usuario pertenece a la aplicación consumidora; el motor trabaja con miembros certificados, objetos y recibos.
+For example, in a group of vehicles, one participant sends a position or voice note, a neighbor receives it over radio, and the system records which recipients acknowledged the object. Interpreting it as a vehicle, chat, map, or user is the consuming application's responsibility; the engine works with certified members, objects, and receipts.
 
-## 2. Estado real y alcance
+## 2. Current status and scope
 
-El README anterior describía únicamente F0, la fundación del puente Flutter–Rust. Ese estado fue superado. F0 sigue siendo una capa comprobable, pero hoy existe código para grupos, radios, persistencia, contenido y adaptación a productos.
+The previous README described only F0, the foundation of the Flutter–Rust bridge. The project has moved beyond that stage. F0 remains a testable layer, but the codebase now includes groups, radios, persistence, content, and product adapters.
 
-| Capacidad | Situación documentada | Límite de la evidencia |
+| Capability | Documented status | Evidence boundary |
 |---|---|---|
-| Puente Flutter → nativo → Rust | Implementado, con contratos y pruebas | Un puente correcto no prueba conectividad física |
-| Identidad persistente | Android Keystore y Apple Keychain | No equivale a auditoría independiente de seguridad |
-| Texto, GPS y voz bilateral | Implementados; uso confirmado por el usuario en una integración de producto con Android/iPhone | No certifica todas las combinaciones de OS y hardware |
-| Enlace BLE autenticado | Implementado y observado físicamente | Campaña exhaustiva de cortes y reinicios pendiente |
-| Wi-Fi Aware | Adaptadores y evidencia Android↔Android registrados | iPhone↔iPhone y regresión de producto pendientes |
-| Relay durable | Núcleo, persistencia y ejecutores parciales | Falta campaña física reproducible A→B→C |
-| Grupos de 50 miembros | Contratos acotados y pruebas sintéticas | No hay certificación con 50 radios reales |
-| Segundo plano | Bases nativas implementadas | Continuidad, pantalla bloqueada y consumo por validar |
-| Pasarela de producto → Internet | Código local de texto y pruebas registrados | Despliegue/E2E remoto y extensión a voz/GPS pendientes |
+| Flutter → native → Rust bridge | Implemented, with contracts and tests | A correct bridge does not prove physical connectivity |
+| Persistent identity | Android Keystore and Apple Keychain | Not equivalent to an independent security audit |
+| Two-way text, GPS, and voice | Implemented; use confirmed by the user in an Android/iPhone product integration | Does not certify every OS and hardware combination |
+| Authenticated BLE link | Implemented and physically observed | Exhaustive interruption and restart campaign pending |
+| Wi-Fi Aware | Adapters and Android↔Android evidence recorded | iPhone↔iPhone and product regression testing pending |
+| Durable relay | Core, persistence, and partial executors | Reproducible physical A→B→C campaign still required |
+| Groups of 50 members | Bounded contracts and synthetic tests | No certification with 50 physical radios |
+| Background operation | Native foundations implemented | Continuity, locked-screen operation, and power use require validation |
+| Product → Internet gateway | Local text code and tests recorded | Remote deployment/E2E and voice/GPS support pending |
 
-Las observaciones de la integración de producto documentadas en este repositorio corresponden al producto que consume el host. No deben atribuirse automáticamente a una build concreta de la aplicación Mesh Lab sin registrar esa build y repetir la prueba.
+Product integration observations recorded in this repository refer to the product consuming the host. They must not automatically be attributed to a particular Mesh Lab application build without recording that build and repeating the test.
 
-Los documentos F0/F1 conservan valor histórico. Cuando contradicen el estado actual, se debe consultar el código y las entradas más recientes de progreso. En particular, las afirmaciones antiguas de que no hay radio, texto o voz ya no describen este checkout.
+F0/F1 documents retain historical value. When they conflict with the current state, consult the code and the latest progress entries. In particular, older statements that radio, text, or voice are absent no longer describe this checkout.
 
-## 3. Arquitectura del sistema
+## 3. System architecture
 
-El mapa describe **las fronteras y rutas de llamada del código actual dentro de un teléfono**. La app de laboratorio y una aplicación que use el SDK son consumidores alternativos; Android e iOS son implementaciones alternativas del host. No se ejecutan ambos hosts en un mismo teléfono.
+This map describes **the boundaries and call paths of the current code within one phone**. The lab app and an application using the SDK are alternative consumers; Android and iOS are alternative host implementations. Both hosts do not run on the same phone.
 
-La arquitectura se muestra en dos vistas: **la ruta de llamadas al motor** y **el intercambio por radio**. Separarlas evita mezclar las dependencias internas con los enlaces entre teléfonos. Las claves protegidas se resumen en una tabla independiente.
+The architecture has two views: **the call path into the engine** and **radio communication**. Keeping them separate avoids mixing internal dependencies with links between phones. Protected keys are summarized in a separate table.
 
-**Vista A · De la aplicación al motor y al almacenamiento**
+**View A · From the application to the engine and storage**
 
-Las flechas indican llamadas; resultados y errores regresan por la misma ruta. Pigeon genera los bindings que se comunican mediante `Flutter BasicMessageChannel`, no un servicio adicional.
+Arrows indicate calls; results and errors return along the same path. Pigeon generates bindings that communicate through `Flutter BasicMessageChannel`, rather than providing an additional service.
 
 ```mermaid
 flowchart TB
     subgraph DartLayer["1 · Flutter / Dart"]
         Lab["Mesh Lab<br/>LabScreen + LabController"] --> LabAdapter["NativeLabSdk"]
-        Product["Aplicación consumidora"] --> SDK["FieldMeshClient"]
+        Product["Consuming application"] --> SDK["FieldMeshClient"]
         SDK --> Gateway["MeshHostGateway"]
-        LabAdapter --> API["MeshHostApi<br/>Binding Pigeon"]
+        LabAdapter --> API["MeshHostApi<br/>Pigeon binding"]
         Gateway --> API
     end
 
-    subgraph NativeLayer["2 · Host nativo · una plataforma por teléfono"]
+    subgraph NativeLayer["2 · Native host · one platform per phone"]
         Android["Android · Kotlin<br/>MeshHostPlugin"] --> ABridge["NativeRuntime<br/>+ NativeBridge"]
         ABridge --> JNI["mesh-ffi-jni"]
         Apple["iOS · Swift<br/>MeshHostPlugin"] --> IBridge["NativeRuntime<br/>import MeshEngine"]
-        IBridge --> CABI["Entrada ABI C"]
+        IBridge --> CABI["C ABI entry"]
     end
 
-    subgraph EngineLayer["3 · Implementación Rust compartida"]
-        SharedFFI["mesh-ffi-c<br/>Funciones y registros compartidos"]
-        SharedFFI --> Core["Protocolo · sesión<br/>runtime · replicación"]
-        SharedFFI --> Store["mesh-store<br/>Transacciones y colas"]
-        Store --> DB["rusqlite + SQLCipher<br/>Base local cifrada"]
+    subgraph EngineLayer["3 · Shared Rust implementation"]
+        SharedFFI["mesh-ffi-c<br/>Shared functions and registries"]
+        SharedFFI --> Core["Protocol · session<br/>runtime · replication"]
+        SharedFFI --> Store["mesh-store<br/>Transactions and queues"]
+        Store --> DB["rusqlite + SQLCipher<br/>Encrypted local database"]
     end
 
     API --> Android
@@ -106,326 +106,326 @@ flowchart TB
     CABI --> SharedFFI
 ```
 
-Android entra por JNI y reutiliza funciones Rust de `mesh-ffi-c`; iOS llama a sus funciones `extern "C"` mediante el XCFramework. Los dos caminos convergen en la implementación compartida. SQLCipher se ejecuta dentro del proceso: no es un servidor externo.
+Android enters through JNI and reuses Rust functions in `mesh-ffi-c`; iOS calls its `extern "C"` functions through the XCFramework. Both paths converge on the shared implementation. SQLCipher runs within the process; it is not an external server.
 
-La vista agrupa la coordinación del host para mostrar sus fronteras. Algunas operaciones pasan primero por el ejecutor de radio —por ejemplo, `sendText`— antes de llamar a `NativeRuntime`, como se detalla en 3.2. Las flechas no representan un grafo completo de dependencias entre crates.
+This view groups host coordination to show its boundaries. Some operations first pass through the radio executor—for example, `sendText`—before calling `NativeRuntime`, as detailed in 3.2. The arrows are not a complete crate dependency graph.
 
-**Vista B · Radio y ejecución de una sesión**
+**View B · Radio and session execution**
 
-Esta vista amplía el host nativo anterior. Representa un teléfono local y un vecino; no añade un segundo motor dentro del teléfono.
+This view expands the native host shown above. It represents one local phone and one neighbor; it does not add a second engine inside the phone.
 
 ```mermaid
 flowchart LR
-    Peer["Teléfono vecino"] <-->|"BLE / Wi-Fi Aware"| Radio["Adaptadores nativos<br/>BluetoothAccess<br/>WifiAwareAccess"]
-    Radio -->|"Solicita validar o cifrar"| Runtime["NativeRuntime<br/>Puente de la plataforma"]
-    Runtime -->|"JNI o ABI C"| Engine["Motor Rust<br/>Sesiones y objetos durables"]
+    Peer["Neighboring phone"] <-->|"BLE / Wi-Fi Aware"| Radio["Native adapters<br/>BluetoothAccess<br/>WifiAwareAccess"]
+    Radio -->|"Request validation or encryption"| Runtime["NativeRuntime<br/>Platform bridge"]
+    Runtime -->|"JNI or C ABI"| Engine["Rust engine<br/>Sessions and durable objects"]
 ```
 
-Los callbacks del sistema entregan datos a los adaptadores. Éstos llaman a Rust por el puente nativo y utilizan sus resultados para transmitir o procesar contenido. **Rust no abre directamente los radios y los frames de radio no pasan por Dart.**
+Operating system callbacks deliver data to the adapters. The adapters call Rust through the native bridge and use its results to transmit or process content. **Rust does not open radios directly, and radio frames do not pass through Dart.**
 
-El enlace con el vecino depende de hardware, permisos, firma y capacidades de la build. El diagrama no afirma interoperabilidad Wi-Fi Aware entre todas las plataformas ni equivalencia de sus ejecutores de relay; las diferencias Android/iOS se explican en 3.2.
+The neighbor link depends on hardware, permissions, signing, and build capabilities. The diagram does not claim Wi-Fi Aware interoperability across all platforms or equivalent relay executors; Android/iOS differences are explained in 3.2.
 
-**Claves protegidas · responsabilidad del host**
+**Protected keys · host responsibility**
 
-| Plataforma | Componente nativo | Protección persistente |
+| Platform | Native component | Persistent protection |
 |---|---|---|
-| Android | `SecureIdentity` | Android Keystore protege el material privado almacenado |
-| iOS | `SecureIdentity` | Apple Keychain conserva el material privado |
+| Android | `SecureIdentity` | Android Keystore protects stored private material |
+| iOS | `SecureIdentity` | Apple Keychain stores private material |
 
-El host aporta a las operaciones Rust el material necesario. Las semillas privadas no se exponen al SDK Dart. La protección persistente no significa que todas las operaciones criptográficas ocurran dentro de hardware seguro.
+The host supplies the material required by Rust operations. Private seeds are not exposed to the Dart SDK. Persistent protection does not mean every cryptographic operation takes place inside secure hardware.
 
-### 3.1 Flutter: intención, contenido y presentación
+### 3.1 Flutter: intent, content, and presentation
 
-La ruta del laboratorio es `MeshLabApp → LabScreen/LabController → NativeLabSdk → MeshHostApi`. `LabController`, basado en `ChangeNotifier`, proyecta datos del host, gestiona el chat y consulta el progreso de entrega. La pantalla agrupa Red, GPS, Texto, Voz y Diagnóstico.
+The lab path is `MeshLabApp → LabScreen/LabController → NativeLabSdk → MeshHostApi`. `LabController`, based on `ChangeNotifier`, projects host data, manages chat, and queries delivery progress. The screen groups Network, GPS, Text, Voice, and Diagnostics.
 
-La ruta de producto es `FieldMeshClient → FieldMeshGateway → MeshHostGateway → MeshHostApi`. `FieldMeshGateway` es la interfaz sustituible en pruebas; `MeshHostGateway` es su implementación nativa predeterminada. **Mesh Lab no llama a `FieldMeshClient`: utiliza directamente su adaptador `NativeLabSdk`.** Ambas rutas convergen en el mismo plugin `mesh_host`.
+The product path is `FieldMeshClient → FieldMeshGateway → MeshHostGateway → MeshHostApi`. `FieldMeshGateway` is the replaceable interface used in tests; `MeshHostGateway` is its default native implementation. **Mesh Lab does not call `FieldMeshClient`: it uses its own `NativeLabSdk` adapter directly.** Both paths converge on the same `mesh_host` plugin.
 
-La UI no valida firmas ni declara entregado un objeto porque terminó una escritura. Consulta la evidencia producida por las capas inferiores. Sin embargo, Dart sí manipula contenido de aplicación: texto, coordenadas y audio comprimido saliente. No debe describirse esta arquitectura como si ningún payload atravesara Flutter.
+The UI does not validate signatures or declare an object delivered merely because a write completed. It queries evidence produced by the lower layers. However, Dart does handle application content: text, coordinates, and outgoing compressed audio. This architecture should not be described as if no payload ever passed through Flutter.
 
-Hay dependencias laterales del laboratorio, omitidas del mapa principal para mantener legible la ruta del motor:
+The lab has additional dependencies omitted from the main map to keep the engine path readable:
 
-| Dependencia | Uso real | Relación con la malla |
+| Dependency | Actual use | Relationship to the mesh |
 |---|---|---|
-| `geolocator` | Obtener una fijación local desde `LabController` | La ubicación se codifica y se envía mediante `sendText` del host |
-| `record` | Grabar AAC/M4A desde `LabScreen` | Dart lee los bytes comprimidos y los pasa a `sendVoice` |
-| `shared_preferences` | Conservar la proyección del chat del laboratorio | No sustituye al outbox SQLCipher ni acredita entrega |
+| `geolocator` | Obtain a local location fix from `LabController` | The location is encoded and sent through the host's `sendText` |
+| `record` | Record AAC/M4A from `LabScreen` | Dart reads the compressed bytes and passes them to `sendVoice` |
+| `shared_preferences` | Preserve the lab's chat projection | Does not replace the SQLCipher outbox or establish delivery |
 
-Estos plugins acceden a sus propias implementaciones de plataforma. La captura de ubicación y grabación de voz no pasan por el motor Rust. La reproducción de voz recibida sí se solicita al host de malla. Las semillas privadas y los frames cifrados de radio permanecen fuera de la API Dart de producto.
+These plugins access their own platform implementations. Location capture and voice recording do not pass through the Rust engine. Playback of received voice is requested through the mesh host. Private seeds and encrypted radio frames remain outside the product Dart API.
 
-### 3.2 Pigeon, hosts y ejecución nativa
+### 3.2 Pigeon, hosts, and native execution
 
-El contrato fuente está en [mesh_api.dart](platforms/mesh_host/pigeons/mesh_api.dart). **Pigeon genera código; no es un servicio intermedio en ejecución.** Sus bindings Dart/Kotlin/Swift usan canales Flutter para despachar las operaciones a `MeshHostPlugin` y devolver resultados o errores.
+The source contract is [mesh_api.dart](platforms/mesh_host/pigeons/mesh_api.dart). **Pigeon generates code; it is not an intermediate runtime service.** Its Dart/Kotlin/Swift bindings use Flutter channels to dispatch operations to `MeshHostPlugin` and return results or errors.
 
-Los hosts poseen descubrimiento, conexiones, sockets, colas de escritura, acceso a claves protegidas, reproducción y handles del motor. Los handlers del plugin delegan según la operación: identidad y almacenamiento, diagnóstico, o adaptadores de radio. Un `sendText`, por ejemplo, entra en `BluetoothAccess` antes de que éste solicite persistencia y cifrado a Rust.
+Hosts own discovery, connections, sockets, write queues, access to protected keys, playback, and engine handles. Plugin handlers delegate according to the operation: identity and storage, diagnostics, or radio adapters. For example, `sendText` enters `BluetoothAccess` before that component requests persistence and encryption from Rust.
 
-La organización de los radios presenta una diferencia importante entre plataformas:
+Radio organization differs between platforms:
 
-- **Android:** `WifiAwareAccess` descubre y establece enlaces Aware; su callback `acceptSocket` entrega el socket a `BluetoothAccess.acceptAwareSocket`. A pesar de su nombre, `BluetoothAccess` también contiene ejecución de sesiones y contenido de esos sockets Aware.
-- **iOS:** `WifiAwareAccess` mantiene sus propias conexiones y sesiones Noise, operadas mediante `NativeRuntime`. `MeshHostPlugin` conecta ese adaptador con `BluetoothAccess` mediante callbacks: salida por `setAwarePayloadSender` y recepción por `setPayloadReceiver`/`acceptAwarePayload`. Comparten procesamiento de contenido, pero no un único propietario de todas las conexiones.
+- **Android:** `WifiAwareAccess` discovers and establishes Aware links; its `acceptSocket` callback hands the socket to `BluetoothAccess.acceptAwareSocket`. Despite its name, `BluetoothAccess` also executes sessions and content operations for those Aware sockets.
+- **iOS:** `WifiAwareAccess` maintains its own connections and Noise sessions, operated through `NativeRuntime`. `MeshHostPlugin` connects this adapter to `BluetoothAccess` through callbacks: outgoing data via `setAwarePayloadSender`, and reception via `setPayloadReceiver`/`acceptAwarePayload`. They share content processing, but ownership of all connections is not centralized in one component.
 
-Por tanto, la separación en “BLE” y “Aware” es útil para describir transportes, pero no significa que existan dos ejecutores totalmente independientes e idénticos en ambos sistemas.
+Thus, separating “BLE” and “Aware” is useful for describing transports, but does not mean there are two fully independent, identical executors on both systems.
 
-En Android, `NativeBridge` carga `libmesh_ffi_jni.so` y expone métodos JNI. **`mesh-ffi-jni` llama a funciones Rust de `mesh-ffi-c`**, reutilizando sus registros y operaciones; no carga una segunda biblioteca C independiente. En iOS, `NativeRuntime` importa `MeshEngine` y llama a las funciones `extern "C"` de `mesh-ffi-c`, empaquetadas en `MeshEngine.xcframework`. Ambos caminos convergen en la misma implementación compartida, aunque sus fronteras ABI sean distintas.
+On Android, `NativeBridge` loads `libmesh_ffi_jni.so` and exposes JNI methods. **`mesh-ffi-jni` calls Rust functions in `mesh-ffi-c`**, reusing its registries and operations; it does not load a second independent C library. On iOS, `NativeRuntime` imports `MeshEngine` and calls the `extern "C"` functions of `mesh-ffi-c`, packaged in `MeshEngine.xcframework`. Both paths converge on the same shared implementation, although their ABI boundaries differ.
 
-`NativeRuntime` es código del host: un singleton Kotlin con dispatcher y un singleton Swift con cola serial. No es el crate `mesh-runtime`. El almacenamiento, las sesiones y el diagnóstico tienen handles y estados diferenciados; no existe un único objeto `mesh-runtime` por el que transiten obligatoriamente todas las operaciones durables.
+`NativeRuntime` is host code: a Kotlin singleton with a dispatcher and a Swift singleton with a serial queue. It is not the `mesh-runtime` crate. Storage, sessions, and diagnostics have separate handles and states; there is no single `mesh-runtime` object through which every durable operation must pass.
 
-Un hot restart de Dart no equivale a terminar el proceso nativo. Tampoco implica que todos los adaptadores de radio sobrevivan a cualquier destrucción del plugin: Android libera sus adaptadores al desacoplar el engine Flutter y conserva el store de ámbito de proceso. Al cambiar Rust hay que reconstruir las bibliotecas y relanzar la app; hot reload no reemplaza código nativo.
+A Dart hot restart is not equivalent to terminating the native process. Nor does it imply that all radio adapters survive every plugin teardown: Android releases its adapters when the Flutter engine detaches and retains the process-scoped store. After changing Rust, rebuild the libraries and relaunch the app; hot reload does not replace native code.
 
-### 3.3 Núcleo Rust y persistencia
+### 3.3 Rust core and persistence
 
-El workspace separa responsabilidades para probar reglas sin depender de radios. Esta tabla es un inventario funcional, no una cadena de ejecución estrictamente secuencial:
+The workspace separates responsibilities so rules can be tested without radios. This table is a functional inventory, not a strictly sequential execution chain:
 
-| Crate | Responsabilidad |
+| Crate | Responsibility |
 |---|---|
-| `mesh-types` | Identificadores, estructuras comunes y límites |
-| `mesh-codec` | Codificación y decodificación, incluido CBOR canónico |
-| `mesh-object` | Objetos, manifests y partición en chunks |
-| `mesh-crypto` | Primitivas de firma, cifrado y protección de claves de entrega |
-| `mesh-protocol` | Políticas, certificados, anuncios y recibos autenticados |
-| `mesh-session` | Handshake Noise, autenticación y protección contra replay |
-| `mesh-link` | Encuadre acotado de registros, independiente del radio; no un driver BLE/Aware |
-| `mesh-runtime` | Transiciones de estado de diagnóstico, envío y recepción |
-| `mesh-store` | Persistencia SQLCipher, políticas y transacciones durables |
-| `mesh-replication` | Vecinos, presencia, deduplicación y reglas de relay/transporte |
-| `mesh-sim` | Herramientas y escenarios sintéticos de validación; no una capa del trayecto móvil |
-| `mesh-ffi-c` | Entrada ABI C, funciones Rust compartidas y registros de handles de runtime/store/sesión |
-| `mesh-ffi-jni` | Adaptación JNI de argumentos, resultados y errores para Android |
+| `mesh-types` | Identifiers, common structures, and bounds |
+| `mesh-codec` | Encoding and decoding, including canonical CBOR |
+| `mesh-object` | Objects, manifests, and chunking |
+| `mesh-crypto` | Signature, encryption, and delivery key protection primitives |
+| `mesh-protocol` | Policies, certificates, announcements, and authenticated receipts |
+| `mesh-session` | Noise handshake, authentication, and replay protection |
+| `mesh-link` | Bounded, radio-independent record framing; not a BLE/Aware driver |
+| `mesh-runtime` | Diagnostic, send, and receive state transitions |
+| `mesh-store` | SQLCipher persistence, policies, and durable transactions |
+| `mesh-replication` | Neighbors, presence, deduplication, and relay/transport rules |
+| `mesh-sim` | Synthetic validation tools and scenarios; not a layer in the mobile call path |
+| `mesh-ffi-c` | C ABI entry, shared Rust functions, and runtime/store/session handle registries |
+| `mesh-ffi-jni` | JNI adaptation of arguments, results, and errors for Android |
 
-`mesh-store` usa `rusqlite` con SQLCipher y proveedor criptográfico empaquetados. El host aporta la ruta y el material de apertura; Rust mantiene las transacciones y las reglas de persistencia. El cifrado del store no permite asumir que toda copia de contenido de la UI, archivo temporal o caché de reproducción esté dentro de esa base.
+`mesh-store` uses `rusqlite` with bundled SQLCipher and a bundled cryptographic provider. The host supplies the path and opening material; Rust maintains transactions and persistence rules. Store encryption does not imply that every UI content copy, temporary file, or playback cache is inside that database.
 
-Los adaptadores nativos ejecutan las acciones físicas y parte de la coordinación del transporte. La existencia de una política pura en Rust, por ejemplo selección de transporte por objeto, no demuestra que todos los hosts ya consuman esa decisión. Los pendientes del ejecutor siguen descritos en la sección 6 y en [relay-host-executor.md](docs/relay-host-executor.md).
+Native adapters perform physical operations and part of transport coordination. The existence of a pure Rust policy, such as transport selection per object, does not prove that every host already consumes that decision. Outstanding executor work is described in section 6 and [relay-host-executor.md](docs/relay-host-executor.md).
 
-### 3.4 Recorrido de datos y observación de estado
+### 3.4 Data flow and state observation
 
-**Salida:** Dart entrega contenido e ID lógico al binding Pigeon; el plugin lo delega al ejecutor nativo. Éste solicita a Rust validar y persistir la operación, lee registros del outbox y solicita la protección de sesión antes de enviarlos mediante el transporte nativo correspondiente. El retorno de la operación indica admisión o rechazo, no entrega completa al destinatario.
+**Outgoing:** Dart supplies content and a logical ID to the Pigeon binding; the plugin delegates to the native executor. The executor asks Rust to validate and persist the operation, reads outbox records, and requests session protection before sending them through the corresponding native transport. The operation's return value indicates admission or rejection, not complete delivery to the recipient.
 
-**Entrada:** un callback de radio entrega bytes al adaptador nativo. Mediante `NativeRuntime` y FFI se valida la sesión Noise; después se procesa el registro durable y se confirma el contenido cuando corresponde. El host proyecta resultados verificados en estado o colas de eventos. Dart consulta esas proyecciones mediante Pigeon; los bytes de radio no se enrutan a través del árbol de widgets.
+**Incoming:** a radio callback delivers bytes to the native adapter. `NativeRuntime` and FFI validate the Noise session; the durable record is then processed and content committed when appropriate. The host projects verified results into state or event queues. Dart queries these projections through Pigeon; radio bytes are not routed through the widget tree.
 
-**Observación:** `FieldMeshClient.watch()` realiza consultas periódicas; las capacidades de recepción certificada drenan colas del host. `subscribe(cursor)` del contrato diagnóstico también devuelve un snapshot mediante una petición. Los nombres `watch` y `subscribe` no implican aquí un `EventChannel` ni un flujo push de frames desde Rust a Flutter.
+**Observation:** `FieldMeshClient.watch()` polls periodically; verified reception capabilities drain host queues. The diagnostic contract's `subscribe(cursor)` also returns a snapshot through a request. Here, the names `watch` and `subscribe` do not imply an `EventChannel` or a push stream of frames from Rust to Flutter.
 
-### 3.5 Evidencia del mapa
+### 3.5 Evidence supporting the map
 
-Las relaciones principales se contrastaron con estos puntos de entrada del checkout:
+The main relationships were checked against these entry points in the checkout:
 
-| Relación | Evidencia en código |
+| Relationship | Code evidence |
 |---|---|
-| App → `NativeLabSdk` | [main.dart](app/lib/main.dart) crea `LabScreen` con ese adaptador por defecto |
-| `NativeLabSdk` → `MeshHostApi` | [lab_controller.dart](app/lib/core/sdk/lab_controller.dart) delega cada operación a `_api` |
-| SDK → gateway → Pigeon | [field_mesh_client.dart](packages/mesh_field_sdk/lib/src/field_mesh_client.dart) construye `MeshHostGateway` por defecto y éste usa `MeshHostApi` |
-| Despacho Android y conexión entre radios | [MeshHostPlugin.kt](platforms/mesh_host/android/src/main/kotlin/com/frazko/mesh_host/MeshHostPlugin.kt) registra la API y conecta `acceptSocket` |
-| Despacho iOS y callbacks Aware | [MeshHostPlugin.swift](platforms/mesh_host/ios/mesh_host/Sources/mesh_host/MeshHostPlugin.swift) registra la API y conecta los callbacks de contenido |
-| Android → JNI → funciones compartidas | [NativeBridge.kt](platforms/mesh_host/android/src/main/kotlin/com/frazko/mesh_host/NativeBridge.kt) y [mesh-ffi-jni](crates/mesh-ffi-jni/src/lib.rs) |
-| iOS → ABI C | [NativeRuntime.swift](platforms/mesh_host/ios/mesh_host/Sources/mesh_host/NativeRuntime.swift) invoca funciones `mesh_*` |
-| Handles y operaciones compartidas | [mesh-ffi-c](crates/mesh-ffi-c/src/lib.rs) mantiene registros y llama a los módulos del motor |
-| Store → SQLCipher | [mesh-store/Cargo.toml](crates/mesh-store/Cargo.toml) y [mesh-store/src/lib.rs](crates/mesh-store/src/lib.rs) |
+| App → `NativeLabSdk` | [main.dart](app/lib/main.dart) creates `LabScreen` with that adapter by default |
+| `NativeLabSdk` → `MeshHostApi` | [lab_controller.dart](app/lib/core/sdk/lab_controller.dart) delegates each operation to `_api` |
+| SDK → gateway → Pigeon | [field_mesh_client.dart](packages/mesh_field_sdk/lib/src/field_mesh_client.dart) constructs `MeshHostGateway` by default, which uses `MeshHostApi` |
+| Android dispatch and radio connection | [MeshHostPlugin.kt](platforms/mesh_host/android/src/main/kotlin/com/frazko/mesh_host/MeshHostPlugin.kt) registers the API and connects `acceptSocket` |
+| iOS dispatch and Aware callbacks | [MeshHostPlugin.swift](platforms/mesh_host/ios/mesh_host/Sources/mesh_host/MeshHostPlugin.swift) registers the API and connects content callbacks |
+| Android → JNI → shared functions | [NativeBridge.kt](platforms/mesh_host/android/src/main/kotlin/com/frazko/mesh_host/NativeBridge.kt) and [mesh-ffi-jni](crates/mesh-ffi-jni/src/lib.rs) |
+| iOS → C ABI | [NativeRuntime.swift](platforms/mesh_host/ios/mesh_host/Sources/mesh_host/NativeRuntime.swift) invokes `mesh_*` functions |
+| Shared handles and operations | [mesh-ffi-c](crates/mesh-ffi-c/src/lib.rs) maintains registries and calls engine modules |
+| Store → SQLCipher | [mesh-store/Cargo.toml](crates/mesh-store/Cargo.toml) and [mesh-store/src/lib.rs](crates/mesh-store/src/lib.rs) |
 
-Esta revisión acredita la correspondencia del mapa con las fuentes examinadas. La corrección funcional bajo cortes, concurrencia o segundo plano requiere las pruebas correspondientes; no se deduce de un diagrama correcto.
+This review establishes that the map matches the sources examined. Functional correctness under interruptions, concurrency, or background operation requires the corresponding tests; it cannot be inferred from a correct diagram.
 
-## 4. Identidad, grupos y seguridad
+## 4. Identity, groups, and security
 
-### 4.1 Identidad de instalación
+### 4.1 Installation identity
 
-Cada instalación prepara cuatro materiales independientes de 32 bytes: identidad, entrega HPKE, clave estática de sesión Noise y clave de base de datos. Las semillas privadas no cruzan Pigeon hacia Flutter.
+Each installation prepares four independent 32-byte materials: identity, HPKE delivery, a Noise static session key, and a database key. Private seeds do not cross Pigeon into Flutter.
 
-En Android, una clave AES-GCM de Android Keystore protege el material persistido en el directorio privado excluido de backup. En iOS, el material se guarda en Keychain con `AfterFirstUnlockThisDeviceOnly` y sin sincronización. Estas protecciones no significan que todas las operaciones Ed25519 o Noise ocurran dentro de hardware seguro: el host utiliza material en memoria para operar.
+On Android, an AES-GCM key in Android Keystore protects material persisted in the private directory excluded from backups. On iOS, material is stored in Keychain with `AfterFirstUnlockThisDeviceOnly` and without synchronization. These protections do not mean all Ed25519 or Noise operations occur inside secure hardware: the host uses material in memory to operate.
 
-La propiedad pública denominada `fingerprint` representa actualmente la clave pública Ed25519 de 32 bytes, como 64 caracteres hexadecimales minúsculos. No es una contraseña ni un identificador de cuenta de la aplicación. El producto debe vincular explícitamente esa identidad criptográfica con su usuario autorizado.
+The public property named `fingerprint` currently represents the 32-byte Ed25519 public key as 64 lowercase hexadecimal characters. It is neither a password nor an application account identifier. The product must explicitly bind this cryptographic identity to its authorized user.
 
-### 4.2 Grupo, autoridad y época
+### 4.2 Group, authority, and epoch
 
-Una política certificada identifica el grupo, su época y los miembros admitidos. El roster aporta las identidades que se aceptan al autenticar sesiones y objetos. La autoridad firma esa política; observar un anuncio de radio no basta para convertirse en miembro.
+A certified policy identifies the group, its epoch, and admitted members. The roster supplies the identities accepted when authenticating sessions and objects. The authority signs this policy; observing a radio announcement is not sufficient to become a member.
 
-Mesh Lab conserva un modo experimental de incorporación abierta. La integración de producto añade una política de admisión con identidades públicas autorizadas por el producto. Son contextos de confianza distintos: la experiencia del laboratorio no debe copiarse como autorización de producción.
+Mesh Lab retains an experimental open enrollment mode. Product integration adds an admission policy with public identities authorized by the product. These are different trust contexts: the lab experience must not be copied as production authorization.
 
-El SDK ofrece controles opcionales para configurar admisión y scope, consultar si la identidad local puede emitir incorporaciones y preparar un relevo de autoridad. El handoff firmado vincula al sucesor con la siguiente época; no se acepta simplemente una clave nueva como autoridad. La migración completa de liderazgo de producto, distribución y ACKs aún tiene gates operativos abiertos.
+The SDK offers optional controls to configure admission and scope, query whether the local identity can issue enrollments, and prepare an authority handoff. The signed handoff binds the successor to the next epoch; a new key is not simply accepted as the authority. Complete product leadership migration, distribution, and ACKs still have open operational gates.
 
-El scope de producto es un identificador hexadecimal de 128 bits. Los hosts separan el almacenamiento por scope mediante `mesh-store/<scope>/state-v1.db`. El cambio de grupo exige cerrar la sesión anterior y limpiar su política activa. Conservar una base cifrada de otro scope no la convierte en el grupo de radio actual.
+The product scope is a 128-bit hexadecimal identifier. Hosts separate storage by scope using `mesh-store/<scope>/state-v1.db`. Changing groups requires closing the previous session and clearing its active policy. Keeping an encrypted database from another scope does not make it the current radio group.
 
-### 4.3 Autenticación del enlace
+### 4.3 Link authentication
 
-El perfil implementado es `Noise_XX_25519_ChaChaPoly_SHA256`. El handshake XX establece material de sesión; después ambos extremos deben producir y verificar una prueba AUTH Ed25519 vinculada al transcript, grupo, época, miembro y rol.
+The implemented profile is `Noise_XX_25519_ChaChaPoly_SHA256`. The XX handshake establishes session material; both endpoints must then produce and verify an Ed25519 AUTH proof bound to the transcript, group, epoch, member, and role.
 
-El hash del handshake se usa como identificador de sesión. El prologue CBOR canónico incorpora el grupo y la época. Así, la autenticación no se basa sólo en que un dispositivo remoto haya contestado por Bluetooth.
+The handshake hash is used as the session identifier. The canonical CBOR prologue includes the group and epoch. Authentication therefore relies on more than a remote device answering over Bluetooth.
 
-El [perfil de sesión](schema/session/lab-v1.md) especifica:
+The [session profile](schema/session/lab-v1.md) specifies:
 
-- Tres mensajes de handshake con payload vacío y tamaños de 32, 96 y 64 bytes.
-- Plazo de handshake de 30 segundos en el módulo de sesión.
-- Payload de aplicación de hasta 4096 bytes por registro de sesión.
-- Frame con versión, ID de sesión de 32 bytes, número de paquete `u64` y ciphertext.
-- Ventana antireplay de 64 paquetes por dirección.
-- Contadores de datos desde 1 y menores que `2^20`.
-- Reconexión mediante un XX nuevo, con entropía y espacio de contadores nuevos.
+- Three handshake messages with empty payloads and sizes of 32, 96, and 64 bytes.
+- A 30-second handshake deadline in the session module.
+- Application payloads of up to 4096 bytes per session record.
+- A frame containing version, a 32-byte session ID, a `u64` packet number, and ciphertext.
+- A 64-packet replay window per direction.
+- Data counters starting at 1 and remaining below `2^20`.
+- Reconnection through a new XX handshake with fresh entropy and counter space.
 
-El contador sólo avanza en recepción tras validaciones satisfactorias. Un paquete alterado no puede adelantar la ventana. El nonce de un emisor no se rebobina para retransmitir contenido.
+The receive counter advances only after successful validation. A tampered packet cannot advance the window. A sender's nonce is never rewound to retransmit content.
 
-### 4.4 Protección de objetos
+### 4.4 Object protection
 
-La protección del enlace y la del objeto cumplen funciones diferentes. Noise protege el salto entre vecinos. El protocolo de objetos firma el origen y protege el contenido para su audiencia, de modo que la persistencia y los recibos siguen siendo verificables al atravesar relays.
+Link and object protection serve different purposes. Noise protects the hop between neighbors. The object protocol signs the origin and protects content for its audience, so persistence and receipts remain verifiable across relays.
 
-El proveedor usa Ed25519, HPKE con X25519/HKDF-SHA256/ChaCha20-Poly1305 y cifrado autenticado de chunks. Los dominios de firma separan certificados, objetos, recibos, autenticación de sesión, handoffs y pruebas de relevo a nube.
+The provider uses Ed25519, HPKE with X25519/HKDF-SHA256/ChaCha20-Poly1305, and authenticated chunk encryption. Signature domains separate certificates, objects, receipts, session authentication, handoffs, and cloud relay proofs.
 
-No se declara auditoría criptográfica independiente, borrado perfecto de todas las copias en memoria ni seguridad de producción certificada. Los rechazos y pruebas del repositorio son evidencia de implementación, no sustitutos de esa auditoría.
+The project does not claim an independent cryptographic audit, perfect erasure of every memory copy, or certified production security. Rejection behavior and repository tests are implementation evidence, not substitutes for such an audit.
 
-## 5. Descubrimiento, radios y sesiones
+## 5. Discovery, radios, and sessions
 
 ### 5.1 Bluetooth LE
 
-BLE proporciona descubrimiento, incorporación y transporte autenticado. Los hosts fragmentan los registros según las restricciones de GATT/ATT y mantienen colas para no mezclar fragmentos ni alterar el orden de cifrado.
+BLE provides discovery, enrollment, and authenticated transport. Hosts fragment records according to GATT/ATT constraints and maintain queues to avoid mixing fragments or changing encryption order.
 
-La salud del enlace se comprueba con respuestas autenticadas y reloj monótono: la implementación registra sondeos cada 3 segundos y vencimiento después de 12 segundos sin prueba válida. Una escritura aceptada por el sistema operativo no renueva por sí sola la vida del vecino.
+Link health is checked using authenticated responses and a monotonic clock: the implementation records probes every 3 seconds and expiry after 12 seconds without valid proof. A write accepted by the operating system does not by itself renew a neighbor's liveness.
 
-Los registros públicos de incorporación tienen un dominio versionado de 128 bits. Esto evita confundir un registro opaco Noise con un mensaje de incorporación por la coincidencia de un solo byte, fallo encontrado durante la campaña física.
+Public enrollment records use a versioned 128-bit domain. This avoids confusing an opaque Noise record with an enrollment message because a single byte happens to match—a failure found during physical testing.
 
 ### 5.2 Wi-Fi Aware
 
-Wi-Fi Aware aporta descubrimiento y enlaces directos en equipos compatibles. El flujo de usuario no requiere introducir router, hotspot, SSID ni IP. El host sí maneja primitivas de red y sockets internamente; no se trata de una ausencia de IP en todas las capas.
+Wi-Fi Aware provides discovery and direct links on compatible devices. The user flow does not require entering router, hotspot, SSID, or IP settings. The host still handles networking primitives and sockets internally; IP is not absent from every layer.
 
-Android debe disponer de soporte del dispositivo, APIs y permisos correspondientes. El adaptador iOS verifica iOS 26 o posterior, capacidades del hardware y disponibilidad de la integración. La firma y el entitlement de Wi-Fi Aware condicionan qué puede abrir una build real. El mínimo de compilación iOS 15 no garantiza Wi-Fi Aware.
+Android requires the corresponding device support, APIs, and permissions. The iOS adapter checks for iOS 26 or later, hardware capabilities, and integration availability. Signing and the Wi-Fi Aware entitlement determine what an actual build can open. The iOS 15 minimum build target does not guarantee Wi-Fi Aware support.
 
-El plan de vecinos limita a dos candidatos Aware directos por nodo y deriva el overlay del roster certificado. El núcleo contempla predecesor/sucesor y un enlace BLE adicional en determinadas topologías. La sustitución física de vecinos fuera de alcance y la convergencia bajo cortes no están certificadas por esa regla matemática.
+The neighbor plan limits each node to two direct Aware candidates and derives the overlay from the certified roster. The core supports predecessor/successor relationships and an additional BLE link in certain topologies. That mathematical rule does not certify physical replacement of out-of-range neighbors or convergence under interruptions.
 
-### 5.3 Estados que deben distinguirse
+### 5.3 States that must remain distinct
 
-Un radio disponible, un peer descubierto, un enlace autenticado y una entrega confirmada son hechos diferentes. La UI o un producto deben conservar esa distinción:
+An available radio, a discovered peer, an authenticated link, and a confirmed delivery are different facts. The UI or product must preserve this distinction:
 
-1. El equipo tiene el radio y los permisos.
-2. El host descubre un candidato.
-3. La sesión valida Noise y la identidad certificada.
-4. El transporte queda listo para contenido.
-5. Un objeto entra al outbox.
-6. Sus destinatarios emiten recibos válidos.
+1. The device has the radio and permissions.
+2. The host discovers a candidate.
+3. The session validates Noise and the certified identity.
+4. The transport becomes ready for content.
+5. An object enters the outbox.
+6. Its recipients issue valid receipts.
 
-Que Wi-Fi Aware esté pendiente no debe bloquear un enlace BLE utilizable. A la inversa, una conexión visible en el sistema no debe presentarse como una sesión segura sin autenticación.
+Pending Wi-Fi Aware must not block a usable BLE link. Conversely, a connection visible to the operating system must not be presented as a secure session without authentication.
 
-## 6. Entrega durable y múltiples saltos
+## 6. Durable delivery and multiple hops
 
-### 6.1 Del envío al recibo
+### 6.1 From sending to a receipt
 
-El envío pasa por una secuencia verificable:
+Sending follows a verifiable sequence:
 
-1. La aplicación aporta contenido y un ID lógico, o el SDK genera ese ID.
-2. El host solicita crear los objetos necesarios para la audiencia certificada.
-3. Rust valida, firma, sella y persiste el contenido y su operación en SQLCipher.
-4. El ejecutor lee el outbox y emite registros por enlaces autenticados.
-5. El receptor valida el anuncio antes de aceptar los chunks.
-6. Al completar el objeto, verifica el contenido y confirma su entrega local y receipt.
-7. El origen valida los recibos y actualiza el resumen de la acción lógica.
-8. Un `ReceiptAck` firmado por el origen permite detener el reintento del receipt correspondiente.
+1. The application supplies content and a logical ID, or the SDK generates that ID.
+2. The host requests creation of the objects required for the certified audience.
+3. Rust validates, signs, seals, and persists the content and its operation in SQLCipher.
+4. The executor reads the outbox and emits records over authenticated links.
+5. The receiver validates the announcement before accepting chunks.
+6. Once the object is complete, it verifies the content and commits local delivery and its receipt.
+7. The origin validates receipts and updates the logical action's aggregate status.
+8. A `ReceiptAck` signed by the origin allows retries of the corresponding receipt to stop.
 
 ```mermaid
 sequenceDiagram
-    participant A as Origen A
+    participant A as Origin A
     participant B as Relay B
-    participant C as Destino C
-    A->>A: Persistir objeto y outbox
-    A->>B: Anuncio + chunks sobre enlace autenticado
-    B->>B: Validar y confirmar custodia en SQLCipher
-    B->>C: Reenviar objeto persistido
-    C->>C: Verificar, commit local y receipt
-    C-->>B: Receipt firmado
-    B->>B: Persistir receipt para relevo
-    B-->>A: Receipt firmado de C
-    A->>A: Actualizar entrega
-    A-->>B: ReceiptAck firmado
+    participant C as Destination C
+    A->>A: Persist object and outbox
+    A->>B: Announcement + chunks over authenticated link
+    B->>B: Validate and commit custody in SQLCipher
+    B->>C: Forward persisted object
+    C->>C: Verify, commit locally, and issue receipt
+    C-->>B: Signed receipt
+    B->>B: Persist receipt for relay
+    B-->>A: Signed receipt from C
+    A->>A: Update delivery status
+    A-->>B: Signed ReceiptAck
     B-->>C: ReceiptAck
 ```
 
-El diagrama representa el contrato durable. Su existencia en código y pruebas FFI no certifica todavía esa topología completa sobre tres radios físicos.
+The diagram represents the durable contract. Its existence in code and FFI tests does not yet certify that complete topology across three physical radios.
 
-### 6.2 Custodia y recuperación
+### 6.2 Custody and recovery
 
-Un relay debe persistir antes de reenviar. El commit del último chunk y la custodia asociada deben ser consistentes; un buffer RAM no reemplaza la cola durable. Al volver un enlace, los ejecutores drenan las colas de objetos, receipts y ACKs que correspondan.
+A relay must persist before forwarding. The final chunk's commit and associated custody must be consistent; a RAM buffer does not replace the durable queue. When a link returns, executors drain the applicable object, receipt, and ACK queues.
 
-`received_from` identifica al vecino autenticado que entregó el registro. El reenvío debe excluirlo y actualizar la información del salto. Hay límites de saltos y deduplicación para evitar circulación ilimitada. El TTL del contenido y el presupuesto de saltos son controles distintos.
+`received_from` identifies the authenticated neighbor that delivered the record. Forwarding must exclude that neighbor and update hop information. Hop limits and deduplication prevent unlimited circulation. Content TTL and hop budget are separate controls.
 
-El ejecutor Android contempla BLE/WFA autenticados. La documentación del ejecutor mantiene pendiente el relay iOS hacia un vecino WFA individual con exclusión precisa de entrada. También queda integrar completamente la selección común por objeto y validar el failover físico. Véase [relay-host-executor.md](docs/relay-host-executor.md).
+The Android executor supports authenticated BLE/WFA paths. Executor documentation still lists iOS relay to an individual WFA neighbor with precise ingress exclusion as pending. Full integration of common per-object selection and physical failover validation are also outstanding. See [relay-host-executor.md](docs/relay-host-executor.md).
 
-### 6.3 Estados de entrega
+### 6.3 Delivery states
 
-La fachada del SDK expone estos estados agregados:
+The SDK interface exposes these aggregate states:
 
-| Estado | Interpretación |
+| State | Meaning |
 |---|---|
-| `queued` | Acción admitida en la cola; todavía sin confirmación completa |
-| `partial` | Parte de la audiencia confirmó |
-| `delivered` | La audiencia requerida confirmó mediante recibos válidos |
-| `expired` | Venció sin completar la entrega requerida |
+| `queued` | Action admitted to the queue; full confirmation still pending |
+| `partial` | Part of the audience has acknowledged it |
+| `delivered` | The required audience has acknowledged it through valid receipts |
+| `expired` | Expired before the required delivery completed |
 
-El contrato interno de relay también distingue conceptos como `custodied` y `no_route`. No deben confundirse con el enum público del SDK.
+The internal relay contract also distinguishes concepts such as `custodied` and `no_route`. These must not be confused with the SDK's public enum.
 
-El éxito de `sendText`, una escritura GATT o el cierre de un socket no demuestra `delivered`. Tampoco equivale un receipt mesh al ACK de un servidor de la aplicación: cada vía conserva su propia evidencia.
+Successful `sendText`, a GATT write, or a socket closing does not establish `delivered`. A mesh receipt is also distinct from an application server's ACK: each path retains its own evidence.
 
-### 6.4 Acción lógica y objetos físicos
+### 6.4 Logical actions and physical objects
 
-El grupo permite hasta 50 miembros certificados, pero un objeto protegido admite hasta 10 destinatarios. El envío de grupo distribuye una acción lógica en objetos de audiencia acotada y agrega sus recibos. Por eso el ID lógico del mensaje y el ID de cada objeto no son intercambiables.
+A group supports up to 50 certified members, but a protected object supports up to 10 recipients. Group sending splits a logical action into objects with bounded audiences and aggregates their receipts. Consequently, a message's logical ID and each object's ID are not interchangeable.
 
-Un miembro que se incorpora posteriormente no recibe automáticamente todo el historial previo. La audiencia se define en el envío; la entrada al grupo no implica acceso retroactivo general a mensajes anteriores.
+A member joining later does not automatically receive all previous history. The audience is defined at send time; joining a group does not grant general retroactive access to earlier messages.
 
-## 7. Tipos de contenido y límites
+## 7. Content types and limits
 
-| Nivel | Límite o formato actual | Fuente principal |
+| Layer | Current limit or format | Main source |
 |---|---|---|
-| Grupo | 50 miembros certificados | `mesh-types/src/durable.rs` |
-| Objeto protegido | 10 destinatarios como máximo | `mesh-types/src/durable.rs` |
-| Chunk durable | 1024 bytes | `mesh-types/src/durable.rs` |
-| Objeto de almacenamiento | 64 KiB y hasta 64 chunks | `mesh-types/src/durable.rs` |
-| Plaintext del protocolo | 48 KiB | `mesh-protocol/src/lib.rs` |
-| Registro de aplicación Noise | Hasta 4096 bytes | Perfil de sesión |
-| Texto por SDK | Sobre codificado de hasta 2048 bytes UTF-8 | `field_mesh_client.dart` |
-| Voz por SDK | Hasta 10 s y 47 KiB de audio codificado | `field_mesh_client.dart` |
-| Contexto de voz SDK | Hasta 512 bytes UTF-8 cuando se aporta | `field_mesh_client.dart` |
-| Voz en Mesh Lab | Hasta 8 s, AAC-LC/M4A, mono, 16 kHz, 24 kb/s | `lab_screen.dart` |
-| ID lógico aportado al SDK | 32 caracteres hexadecimales minúsculos | `field_mesh_client.dart` |
-| ID de objeto para reproducción | 64 caracteres hexadecimales minúsculos | `field_mesh_client.dart` |
-| Relay | Hasta 16 saltos; deduplicación acotada a 512 entradas | `mesh-replication/src/lib.rs` |
+| Group | 50 certified members | `mesh-types/src/durable.rs` |
+| Protected object | Up to 10 recipients | `mesh-types/src/durable.rs` |
+| Durable chunk | 1024 bytes | `mesh-types/src/durable.rs` |
+| Storage object | 64 KiB and up to 64 chunks | `mesh-types/src/durable.rs` |
+| Protocol plaintext | 48 KiB | `mesh-protocol/src/lib.rs` |
+| Noise application record | Up to 4096 bytes | Session profile |
+| SDK text | Encoded envelope of up to 2048 UTF-8 bytes | `field_mesh_client.dart` |
+| SDK voice | Up to 10 s and 47 KiB of encoded audio | `field_mesh_client.dart` |
+| SDK voice context | Up to 512 UTF-8 bytes when supplied | `field_mesh_client.dart` |
+| Mesh Lab voice | Up to 8 s, AAC-LC/M4A, mono, 16 kHz, 24 kb/s | `lab_screen.dart` |
+| Logical ID supplied to the SDK | 32 lowercase hexadecimal characters | `field_mesh_client.dart` |
+| Object ID for playback | 64 lowercase hexadecimal characters | `field_mesh_client.dart` |
+| Relay | Up to 16 hops; deduplication bounded to 512 entries | `mesh-replication/src/lib.rs` |
 
-Los límites pertenecen a capas diferentes. Un máximo de almacenamiento no es una promesa de que cualquier payload de ese tamaño sea admitido por la UI. UTF-8 se mide en bytes: emojis, metadata y sobres consumen presupuesto aunque el texto visible parezca corto.
+These limits belong to different layers. A storage maximum does not promise that the UI will accept any payload of that size. UTF-8 is measured in bytes: emojis, metadata, and envelopes consume the budget even when visible text appears short.
 
-**Texto.** El laboratorio envuelve el mensaje con ID y timestamp híbrido para su chat. El SDK usa su propio sobre de acción para conservar el ID lógico dentro del contenido protegido. Compartir host no implica que todos los sobres de aplicación sean intercambiables.
+**Text.** The lab wraps messages with an ID and hybrid timestamp for its chat. The SDK uses its own action envelope to preserve the logical ID within protected content. Sharing a host does not make all application envelopes interchangeable.
 
-**Ubicación.** Mesh Lab solicita una fijación puntual mediante geolocalización y la envía por el carril durable de contenido. `FieldLocation` aporta coordenadas, precisión, instante y orientación opcional. Una posición recibida puede ser antigua: el producto debe conservar su fecha y decidir cuándo mostrarla como obsoleta. El SDK no ofrece por sí solo rastreo continuo global en segundo plano.
+**Location.** Mesh Lab requests a single geolocation fix and sends it through the durable content path. `FieldLocation` provides coordinates, accuracy, time, and optional heading. A received position may be old: the product must preserve its timestamp and decide when to display it as stale. The SDK does not by itself provide continuous global background tracking.
 
-**Voz.** Son notas completas, no llamadas en tiempo real. El laboratorio graba, lee el archivo comprimido y lo entrega al host. La recepción certificada del SDK identifica el objeto y permite reproducirlo por ID desde almacenamiento privado, sin entregar una ruta o bytes de audio al producto receptor.
+**Voice.** These are complete notes, not real-time calls. The lab records, reads the compressed file, and passes it to the host. The SDK's verified reception identifies the object and supports playback by ID from private storage, without handing an audio path or bytes to the receiving product.
 
-## 8. Preparación y compilación
+## 8. Setup and builds
 
-### 8.1 Toolchain del repositorio
+### 8.1 Repository toolchain
 
-Las versiones siguientes provienen de archivos de configuración y CI del proyecto; no pretenden identificar las versiones más recientes publicadas por sus fabricantes.
+The following versions come from project configuration and CI files; they are not intended to identify the latest versions released by their vendors.
 
-| Herramienta | Versión/configuración |
+| Tool | Version/configuration |
 |---|---|
-| Flutter | 3.47.2, en `.flutter-version` |
-| Dart | Restricción `^3.13.2` en los pubspec |
-| Rust | 1.98.1, en `rust-toolchain.toml` |
+| Flutter | 3.47.2, in `.flutter-version` |
+| Dart | `^3.13.2` constraint in pubspec files |
+| Rust | 1.98.1, in `rust-toolchain.toml` |
 | Android NDK | 28.2.13676358 |
 | JDK | 21 |
 | Gradle / AGP / Kotlin | 9.3.1 / 9.1.0 / 2.4.0 |
-| Xcode | Evidencia histórica local con 26.4.1 |
-| Python | Python 3 para herramientas del repositorio |
+| Xcode | Historical local evidence with 26.4.1 |
+| Python | Python 3 for repository tools |
 
-Los targets nativos son Android ARM64/x86_64 e iOS ARM64 físico y ARM64/x86_64 de simulador. Los mínimos iniciales de compilación son Android API 24 e iOS 15. El soporte de cada radio requiere comprobaciones adicionales en ejecución.
+Native targets are Android ARM64/x86_64, physical iOS ARM64, and iOS simulator ARM64/x86_64. Initial minimum build targets are Android API 24 and iOS 15. Support for each radio requires additional runtime checks.
 
-Se necesita macOS con Xcode para construir Apple. Android requiere el SDK/NDK fijado; `build_native.py` consulta `ANDROID_HOME` y, si no existe, usa `~/Library/Android/sdk`. Los compiladores C son necesarios porque SQLCipher y su proveedor criptográfico se compilan junto con Rust.
+Apple builds require macOS with Xcode. Android requires the pinned SDK/NDK; `build_native.py` checks `ANDROID_HOME` and falls back to `~/Library/Android/sdk` when it is unset. C compilers are required because SQLCipher and its cryptographic provider are built alongside Rust.
 
-### 8.2 Construir las bibliotecas
+### 8.2 Build the libraries
 
-Desde la raíz del repositorio:
+From the repository root:
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
 python3 tools/build_native.py all
 ```
 
-Se puede sustituir `all` por `apple` o `android`. El script añade targets Rust y produce:
+Replace `all` with `apple` or `android` to build one platform. The script adds Rust targets and produces:
 
 - Apple: `platforms/mesh_host/ios/mesh_host/MeshEngine.xcframework`.
 - Android: `platforms/mesh_host/android/src/main/jniLibs/<abi>/libmesh_ffi_jni.so`.
 
-Los binarios son artefactos locales ignorados por Git. Un checkout nuevo debe generarlos antes de compilar Flutter. La reconstrucción también es necesaria después de modificar Rust.
+Binaries are local artifacts ignored by Git. A fresh checkout must generate them before building Flutter. Rebuilding is also required after Rust changes.
 
-### 8.3 Resolver dependencias y ejecutar
+### 8.3 Resolve dependencies and run
 
 ```sh
 cd app
@@ -434,137 +434,139 @@ flutter devices
 flutter run --release -d <device-id>
 ```
 
-Reemplazar `<device-id>` por el identificador real. Para simuladores y desarrollo de UI se puede usar `flutter run -d <simulator-id>`, pero la campaña física usa builds Release de la app normal.
+Replace `<device-id>` with the actual identifier. For simulators and UI development, use `flutter run -d <simulator-id>`; physical campaigns use Release builds of the normal app.
 
-Compilación de paquetes desde `app/`:
+Build packages from `app/`:
 
 ```sh
 flutter build apk --release --target-platform android-arm64,android-x64
 flutter build ios --release
 ```
 
-El APK se produce en `app/build/app/outputs/flutter-apk/app-release.apk`, relativo a la raíz del repositorio. La build iOS exige firma válida para instalar en un teléfono. `flutter build ios --release --no-codesign` permite comprobar compilación sin producir una app directamente instalable firmada.
+The APK is produced at `app/build/app/outputs/flutter-apk/app-release.apk`, relative to the repository root. The iOS build requires valid signing for installation on a phone. `flutter build ios --release --no-codesign` checks compilation without producing a signed app ready for installation.
 
-No instalar el runner instrumental sobre la app durante una campaña normal de uso. Los tests instrumentales tienen su propio procedimiento y pueden reemplazar el entry point.
+Do not install the instrumentation runner over the app during a normal usage campaign. Instrumented tests have their own procedure and may replace the entry point.
 
-## 9. Cómo usar la aplicación
+## 9. Using the application
 
-### 9.1 Primera sesión con dos teléfonos
+The lab UI currently uses Spanish labels. This section gives English descriptions and retains exact UI labels in parentheses where needed to find controls.
 
-La ruta visible de creación del grupo en la app de laboratorio parte de Android.
+### 9.1 First session with two phones
 
-1. Instalar una build Release actual en ambos teléfonos y abrir Mesh Lab.
-2. Entrar a **Diagnóstico → Preparar identidad** en cada equipo. Comprobar que hay huella pública y almacenamiento protegido.
-3. En el Android que será la autoridad inicial, ir a **Red → Crear grupo nuevo**.
-4. Tocar **Conectar sesión** en ese Android.
-5. En el segundo Android, usar **Buscar grupo cercano**. En iPhone, mantenerlo cerca del Android creador y usar la búsqueda disponible mientras no tenga grupo.
-6. Conceder los permisos solicitados y comprobar los detalles de Bluetooth y Wi-Fi Aware en Red.
-7. Esperar incorporación y enlace autenticado. No considerar suficiente el contador de dispositivos detectados.
-8. Enviar primero un texto breve en cada dirección y revisar su estado de entrega.
+The lab app's visible group creation flow starts on Android.
 
-Crear grupos separados en los dos teléfonos no los convierte en miembros de un mismo grupo. La segunda instalación debe incorporarse a la política del primero.
+1. Install a current Release build on both phones and open Mesh Lab.
+2. Open **Diagnostics → Prepare identity** (`Diagnóstico → Preparar identidad`) on each device. Check that a public fingerprint and protected storage are available.
+3. On the Android phone that will be the initial authority, open **Network → Create new group** (`Red → Crear grupo nuevo`).
+4. Tap **Connect session** (`Conectar sesión`) on that Android phone.
+5. On the second Android phone, use **Find nearby group** (`Buscar grupo cercano`). On iPhone, keep it near the Android creator and use the available search while it has no group.
+6. Grant the requested permissions and check Bluetooth and Wi-Fi Aware details in Network.
+7. Wait for enrollment and an authenticated link. A count of detected devices is not sufficient.
+8. Send a short text in each direction first and inspect its delivery status.
 
-Si ya existe un grupo persistido, preparar identidad recupera su estado. No hace falta crear uno nuevo en cada apertura. El resultado observable en Red determina si se requiere conectar o esperar recuperación.
+Creating separate groups on both phones does not make them members of the same group. The second installation must enroll under the first phone's policy.
 
-### 9.2 Pantalla Red
+If a persisted group already exists, preparing identity recovers its state. There is no need to create a new group every time the app opens. The state shown in Network determines whether to connect or wait for recovery.
 
-Muestra grupo, sesión y detalles de radios. **Conectar sesión** inicia búsqueda BLE y Aware; **Salir de sesión** detiene esas búsquedas y los reintentos asociados. Salir no equivale a borrar la identidad o desinstalar la aplicación.
+### 9.2 Network screen
 
-Una función no disponible debe leerse junto a su motivo: permisos, hardware, versión del sistema, política o estado de conexión. No todas las builds iOS tienen la misma capacidad de Wi-Fi Aware aunque compartan la UI.
+Shows group, session, and radio details. **Connect session** starts BLE and Aware discovery; **Leave session** (`Salir de sesión`) stops those searches and associated retries. Leaving does not erase identity or uninstall the application.
 
-### 9.3 Pantalla Texto
+Read an unavailable capability together with its stated reason: permissions, hardware, system version, policy, or connection state. Not all iOS builds have the same Wi-Fi Aware capability even when they share the UI.
 
-Escribir un mensaje y pulsar **Enviar** con enlace seguro disponible. La entrada al chat significa que la operación fue admitida en la cola. Consultar el contador de confirmaciones y el estado hasta entrega, parcialidad o vencimiento.
+### 9.3 Text screen
 
-La fachada y el laboratorio actualmente comprueban conexión segura antes de admitir determinados envíos. La persistencia permite recuperar contenido ya admitido; no debe deducirse que la UI permite componer y encolar todo tipo de mensaje sin ningún vecino conectado.
+Write a message and tap **Send** (`Enviar`) with a secure link available. Its appearance in chat means the operation was admitted to the queue. Check the acknowledgment count and status until delivery, partial delivery, or expiry.
 
-### 9.4 Pantalla GPS
+The SDK interface and lab currently check for a secure connection before admitting certain sends. Persistence allows recovery of content already admitted; it does not imply that the UI supports composing and queuing every message type without any connected neighbor.
 
-Pulsar **Compartir mi ubicación**, autorizar ubicación y esperar una fijación válida. Revisar coordenadas y fecha de actualización. El receptor muestra la ubicación compartida por el otro teléfono.
+### 9.4 GPS screen
 
-Una prueba interior sin fijación GPS no valida este flujo. Probar con señal suficiente y registrar el instante original para distinguir una posición nueva de una entrega retrasada.
+Tap **Share my location** (`Compartir mi ubicación`), grant location permission, and wait for a valid fix. Check the coordinates and update time. The receiver displays the location shared by the other phone.
 
-### 9.5 Pantalla Voz
+An indoor test without a GPS fix does not validate this flow. Test with sufficient signal and record the original time to distinguish a new position from a delayed delivery.
 
-Con enlace seguro, usar el control de grabación y conceder micrófono. El laboratorio detiene automáticamente a los 8 segundos. Al finalizar, el audio se incorpora al envío durable. En el receptor, usar **Reproducir última nota** cuando el host indique que está lista.
+### 9.5 Voice screen
 
-La duración máxima de 10 segundos del SDK no cambia el límite de 8 segundos de esta pantalla. La calidad y latencia dependen del enlace y de la cola pendiente.
+With a secure link, use the recording control and grant microphone permission. The lab stops automatically after 8 seconds. Once recording ends, audio enters durable sending. On the receiver, use **Play latest note** (`Reproducir última nota`) when the host indicates it is ready.
 
-### 9.6 Pantalla Diagnóstico
+The SDK's 10-second maximum does not change this screen's 8-second limit. Quality and latency depend on the link and pending queue.
 
-Permite preparar o recuperar identidad y consultar motor, contrato ABI/API, instancia del proceso, secuencia y compilación. **Verificar puente** comprueba la llamada hasta Rust; **Recuperar estado** consulta snapshots.
+### 9.6 Diagnostics screen
 
-El estado diagnóstico de proceso y el almacén durable son distintos. Un proceso nuevo puede tener otra instancia diagnóstica y conservar identidad, política y colas persistentes. Borrar datos o desinstalar altera esa prueba y puede destruir material necesario para recuperar el almacén.
+Supports preparing or recovering identity and inspecting the engine, ABI/API contract, process instance, sequence, and build. **Verify bridge** (`Verificar puente`) checks the call through to Rust; **Recover state** (`Recuperar estado`) queries snapshots.
 
-## 10. Cómo integrar el SDK
+Process diagnostic state and durable storage are distinct. A new process may have a different diagnostic instance while retaining identity, policy, and persistent queues. Clearing data or uninstalling changes the test and may destroy material needed to recover the store.
 
-El paquete local es `packages/mesh_field_sdk`, versión declarada `0.2.5`, con `publish_to: none`. Se integra mediante dependencia de ruta adecuada al checkout del producto. No hay que asumir una publicación en un registro público.
+## 10. Integrating the SDK
 
-### 10.1 Inicio y envío
+The local package is `packages/mesh_field_sdk`, with declared version `0.2.5` and `publish_to: none`. Integrate it using a path dependency appropriate to the product checkout. Do not assume it has been published to a public registry.
 
-Este ejemplo supone que la aplicación ya resolvió la pertenencia al grupo. Crear un grupo automáticamente en cada producto o cada apertura sería incorrecto.
+### 10.1 Startup and sending
+
+This example assumes the application has already resolved group membership. Automatically creating a group for every product or on every launch would be incorrect.
 
 ```dart
 import 'package:mesh_field_sdk/mesh_field_sdk.dart';
 
-Future<FieldDelivery?> enviarTexto(FieldMeshClient mesh) async {
+Future<FieldDelivery?> sendTextExample(FieldMeshClient mesh) async {
   await mesh.prepareIdentity();
   final group = await mesh.groupInfo();
   if (!group.configured) {
-    // Resolver creación o incorporación según la política del producto.
+    // Resolve group creation or enrollment according to product policy.
     return null;
   }
 
-  // connect inicia la búsqueda; no espera necesariamente autenticación.
+  // connect starts discovery; it does not necessarily wait for authentication.
   final session = await mesh.connect();
   if (!session.secure) return null;
 
-  final delivery = await mesh.sendText('Punto de reunión confirmado');
-  // Conservar delivery?.logicalId para consultar mesh.delivery(id).
+  final delivery = await mesh.sendText('Meeting point confirmed');
+  // Keep delivery?.logicalId to query mesh.delivery(id).
   return delivery;
 }
 ```
 
-La aplicación puede observar `mesh.watch()` y habilitar envíos cuando el estado sea seguro. `watch()` consulta periódicamente el host —un segundo por defecto— y emite cambios; no es una suscripción push directa al radio. Debe cancelarse la suscripción al terminar su propietario.
+The application can observe `mesh.watch()` and enable sending when the state is secure. `watch()` polls the host periodically—once per second by default—and emits changes; it is not a direct radio push subscription. Cancel the subscription when its owner is disposed.
 
-### 10.2 IDs, recepción y entrega
+### 10.2 IDs, reception, and delivery
 
-Si el producto ya tiene una acción persistida, usar `sendTextWithLogicalId`, `sendLocationWithLogicalId` o las variantes de voz. El ID aportado debe tener 32 caracteres hexadecimales minúsculos. Un UUID con guiones requiere conversión explícita en el adaptador y conservación de su correspondencia.
+If the product already has a persisted action, use `sendTextWithLogicalId`, `sendLocationWithLogicalId`, or the voice variants. The supplied ID must contain 32 lowercase hexadecimal characters. A hyphenated UUID requires explicit conversion in the adapter and preservation of its mapping.
 
-Guardar el ID lógico y consultar `delivery(id)` para actualizar el outbox del producto. Un retorno nulo debe tratarse como operación no admitida o sin resultado disponible, según la operación; no como entrega exitosa.
+Store the logical ID and query `delivery(id)` to update the product outbox. Treat a null return as an operation that was not admitted or has no available result, depending on the operation; never as successful delivery.
 
-Para atribuir acciones entrantes, usar `watchVerifiedIncomingText()` y `watchVerifiedIncomingVoice()`. Estas capacidades consumen colas nativas de objetos verificados y aportan origen certificado, ID de objeto e instante, además de los datos propios del contenido. El SDK vuelve a validar su formato.
+To attribute incoming actions, use `watchVerifiedIncomingText()` and `watchVerifiedIncomingVoice()`. These capabilities consume native queues of verified objects and provide a certified origin, object ID, and timestamp alongside content-specific data. The SDK validates their format again.
 
-`watchIncoming()` es una proyección simplificada basada en el último mensaje y su contador. No reemplaza una cola certificada para productos que necesitan conservar ráfagas, atribución y reconciliación. Las colas certificadas también son acotadas: el consumidor debe drenarlas y persistir lo necesario para su producto.
+`watchIncoming()` is a simplified projection based on the latest message and its counter. It does not replace a verified queue for products that need to preserve bursts, attribution, and reconciliation. Verified queues are also bounded: the consumer must drain them and persist what its product requires.
 
-La aplicación debe validar que el origen certificado corresponde a un miembro autorizado de su dominio, deduplicar la acción y manejar conflictos. El nombre visible de un usuario no sustituye ese vínculo.
+The application must validate that the certified origin corresponds to an authorized member of its domain, deduplicate the action, and handle conflicts. A user's display name does not replace that binding.
 
-### 10.3 Capacidades de producto
+### 10.3 Product capabilities
 
-| Capacidad | Uso |
+| Capability | Purpose |
 |---|---|
-| `FieldMeshEnrollmentAccessController` | Instalar roster autorizado y scope de producto |
-| Operaciones de handoff de `FieldMeshClient` | Preparar relevo, rotar autoridad y aplicar política autorizada |
-| `FieldMeshCloudRelaySigner` | Firmar contenido canónico para relevo autorizado a nube |
-| `FieldMeshVerifiedIncomingSource` | Recibir acciones de texto/ubicación con evidencia de origen |
-| `FieldMeshVerifiedIncomingVoiceSource` | Recibir notas de voz verificadas por objeto |
-| `FieldMeshVoiceContextSender` | Sellar contexto de producto junto al audio |
+| `FieldMeshEnrollmentAccessController` | Install an authorized roster and product scope |
+| `FieldMeshClient` handoff operations | Prepare handoff, rotate authority, and apply authorized policy |
+| `FieldMeshCloudRelaySigner` | Sign canonical content for authorized cloud relay |
+| `FieldMeshVerifiedIncomingSource` | Receive text/location actions with origin evidence |
+| `FieldMeshVerifiedIncomingVoiceSource` | Receive verified voice notes by object |
+| `FieldMeshVoiceContextSender` | Seal product context alongside audio |
 
-`playVerifiedVoice(objectId)` reproduce el objeto privado correspondiente. No basar el historial de voz de un producto sólo en “última nota”, porque dos objetos pueden recibirse fuera del orden visual esperado.
+`playVerifiedVoice(objectId)` plays the corresponding private object. Do not base a product's voice history solely on “latest note,” because two objects can arrive outside the expected visual order.
 
-`FieldMeshGateway` permite sustituir el host por un fake en pruebas de producto. Ese fake no constituye evidencia de radio, permisos o persistencia real.
+`FieldMeshGateway` allows the host to be replaced with a fake in product tests. That fake is not evidence of actual radio behavior, permissions, or persistence.
 
-### 10.4 Internet y malla en una aplicación consumidora
+### 10.4 Internet and mesh in a consuming application
 
-La aplicación consumidora decide cómo vincular participantes, historial, posiciones y autoridad. Puede conservar presencia cercana mientras utiliza Internet y reconciliar acciones por su ID lógico. El servidor sigue teniendo su propio ACK y controles de acceso.
+The consuming application decides how to bind participants, history, positions, and authority. It can maintain nearby presence while using the Internet and reconcile actions by logical ID. The server retains its own ACK and access controls.
 
-La pasarela certificada firma un sobre canónico ligado a grupo y época sin exponer semillas. El registro reciente documenta cola local y validación de texto para relevo al servidor; despliegue y E2E remoto siguen pendientes. Tener la capacidad `signCloudRelay` no habilita por sí solo una pasarela operativa.
+The certified gateway signs a canonical envelope bound to group and epoch without exposing seeds. Recent tracking documents a local queue and text validation for server relay; deployment and remote E2E remain pending. Having `signCloudRelay` capability does not by itself enable an operational gateway.
 
-## 11. Pruebas y evidencia
+## 11. Testing and evidence
 
-### 11.1 Validación del motor y herramientas
+### 11.1 Engine and tooling validation
 
-Desde la raíz:
+From the root:
 
 ```sh
 cargo fmt --all -- --check
@@ -576,11 +578,11 @@ python3 tools/check_contracts.py
 python3 -m unittest discover -s tools/tests -v
 ```
 
-Los escenarios F1 ejercitan almacenamiento, criptografía y recuperación en host. Sus informes no deben etiquetarse como pruebas entre teléfonos.
+F1 scenarios exercise storage, cryptography, and recovery on the host. Their reports must not be labeled as phone-to-phone tests.
 
-### 11.2 Flutter y contrato generado
+### 11.2 Flutter and the generated contract
 
-Resolver dependencias dentro de cada paquete antes de sus checks:
+Resolve dependencies inside each package before running its checks:
 
 ```sh
 (cd platforms/mesh_host && flutter pub get --enforce-lockfile && flutter analyze)
@@ -589,9 +591,9 @@ python3 tools/check_pigeon.py
 (cd app && flutter pub get --enforce-lockfile && flutter analyze && flutter test)
 ```
 
-`check_pigeon.py` regenera los tres bindings y compara sus hashes. Puede modificar archivos si detecta divergencia; hay que revisar el diff y mantenerlos sincronizados con el contrato fuente.
+`check_pigeon.py` regenerates the three bindings and compares their hashes. It can modify files if it detects divergence; review the diff and keep bindings synchronized with the source contract.
 
-### 11.3 Hosts nativos
+### 11.3 Native hosts
 
 ```sh
 sh tools/test_apple_host.sh
@@ -599,138 +601,138 @@ cargo build --locked -p mesh-ffi-jni
 (cd app/android && ./gradlew :mesh_host:testDebugUnitTest :mesh_host:assembleRelease)
 ```
 
-Configurar `JAVA_HOME` al JDK 21 antes de invocar Gradle directamente. Las unidades JVM cargan una biblioteca Rust del host; no ejecutan el `.so` Android dentro de un teléfono.
+Set `JAVA_HOME` to JDK 21 before invoking Gradle directly. JVM unit tests load a host Rust library; they do not execute the Android `.so` on a phone.
 
-La CI declarada en [.github/workflows/foundation.yml](.github/workflows/foundation.yml) incluye contratos, suites y builds. También declara un umbral de 90% para líneas nuevas instrumentadas Rust/Dart en PR. No implica 90% de cobertura de callbacks nativos ni una ejecución remota aprobada en esta revisión documental.
+The CI declared in [.github/workflows/foundation.yml](.github/workflows/foundation.yml) includes contracts, suites, and builds. It also declares a 90% threshold for new instrumented Rust/Dart lines in PRs. This does not imply 90% coverage of native callbacks or a successful remote run during this documentation review.
 
-### 11.4 Campaña física reproducible
+### 11.4 Reproducible physical campaign
 
-Para cada ejecución registrar commit/build, modelos, OS, permisos, radios, grupo/época, topología, hora y resultado. La progresión de QA es:
+For each run, record commit/build, device models, OS, permissions, radios, group/epoch, topology, time, and result. QA progresses through:
 
-1. Dos teléfonos: incorporación y autenticación, texto en ambos sentidos, GPS válido y voz.
-2. Recuperación: apagar radio, salir de alcance, cerrar un proceso y volver sin Internet.
-3. Tres teléfonos: A→B→C sin enlace directo A↔C; reiniciar B y observar recuperación.
-4. Verificar recibos, ausencia de duplicados y fechas originales del contenido.
-5. Segundo plano/pantalla bloqueada y medición de consumo.
-6. Grupos mayores y matriz de hardware, incluida la campaña Aware iPhone↔iPhone.
+1. Two phones: enrollment and authentication, text in both directions, valid GPS, and voice.
+2. Recovery: disable radio, move out of range, terminate a process, and return without Internet.
+3. Three phones: A→B→C without a direct A↔C link; restart B and observe recovery.
+4. Verify receipts, absence of duplicates, and original content timestamps.
+5. Background/locked-screen operation and power measurement.
+6. Larger groups and a hardware matrix, including the iPhone↔iPhone Aware campaign.
 
-La ausencia de enlace A↔C debe demostrarse: separar visualmente los teléfonos no basta para concluir que existieron múltiples saltos. No declarar el gate aprobado únicamente porque C recibió el mensaje.
+The absence of an A↔C link must be demonstrated: visually separating phones is not enough to conclude that multiple hops occurred. Do not declare the gate passed solely because C received the message.
 
-Los comandos de esta sección son instrucciones de reproducción. No se ejecutó toda esta campaña al redactar el README; los resultados previos permanecen en el registro de progreso y artefactos correspondientes.
+Commands in this section are reproduction instructions. This entire campaign was not run while writing the README; prior results remain in the progress log and corresponding artifacts.
 
-## 12. Diagnóstico de problemas
+## 12. Troubleshooting
 
-| Síntoma | Qué revisar |
+| Symptom | What to check |
 |---|---|
-| Flutter no encuentra una biblioteca nativa | Ejecutar `build_native.py` para la plataforma y reconstruir la app |
-| Cambios Rust no aparecen | Reconstruir XCFramework/JNI y relanzar el proceso; hot reload no basta |
-| Se descubren teléfonos pero no hay sesión segura | Grupo/época, incorporación, identidad certificada, permisos y logs de Noise |
-| Cada teléfono tiene grupo pero no se autentican | Comprobar que no se crearon dos grupos independientes |
-| iPhone muestra Aware no disponible | Versión de iOS, capacidad de hardware, entitlement y firma del artefacto instalado |
-| Queda “Conectando” después de un reinicio | Revisar cierre de GATT, vencimientos y nueva autenticación; no confiar en un vecino antiguo |
-| Texto aparece en cola sin entrega | Enlaces autenticados, audiencia, receipts y vencimiento; escritura local no equivale a ACK |
-| Texto corto se rechaza | Medir el sobre completo en UTF-8, incluidos metadata y emojis |
-| GPS no cambia | Permisos, servicio de ubicación, fijación válida y timestamp original |
-| Voz no se envía | Micrófono, duración, tamaño codificado, enlace seguro y cola de salida |
-| Fallo de clave o store tras borrar datos | No recrear silenciosamente una identidad sobre un almacén previo; revisar la consistencia de instalación |
-| Gradle usa otra JVM | Revisar JDK 21 y `JAVA_HOME` para comandos directos |
+| Flutter cannot find a native library | Run `build_native.py` for the platform and rebuild the app |
+| Rust changes do not appear | Rebuild XCFramework/JNI and relaunch the process; hot reload is insufficient |
+| Phones are discovered but no secure session forms | Group/epoch, enrollment, certified identity, permissions, and Noise logs |
+| Each phone has a group but they do not authenticate | Check that two independent groups were not created |
+| iPhone reports Aware unavailable | iOS version, hardware capability, entitlement, and signing of the installed artifact |
+| Stuck on “Connecting” after a restart | Check GATT teardown, timeouts, and fresh authentication; do not trust a stale neighbor |
+| Text remains queued without delivery | Authenticated links, audience, receipts, and expiry; a local write is not an ACK |
+| Short text is rejected | Measure the full UTF-8 envelope, including metadata and emojis |
+| GPS does not change | Permissions, location service, valid fix, and original timestamp |
+| Voice is not sent | Microphone, duration, encoded size, secure link, and outgoing queue |
+| Key or store failure after clearing data | Do not silently recreate an identity over a previous store; check installation consistency |
+| Gradle uses a different JVM | Check JDK 21 and `JAVA_HOME` for direct commands |
 
-Conservar logs del host y del motor junto con la build usada. No incluir semillas, claves de base de datos ni material privado en informes de diagnóstico. La exportación completa de diagnóstico sigue siendo un pendiente de cierre.
+Keep host and engine logs alongside the build used. Do not include seeds, database keys, or private material in diagnostic reports. Complete diagnostic export remains an open completion item.
 
-## 13. Mapa del repositorio
+## 13. Repository layout
 
 ```text
 mesh_lab/
-├── app/                         # Aplicación Flutter de laboratorio
-│   ├── lib/core/sdk/             # Controlador y adaptador NativeLabSdk
-│   └── lib/features/laboratory/  # Pantallas de uso y diagnóstico
-├── packages/mesh_field_sdk/      # Fachada Flutter para productos
-├── platforms/mesh_host/          # Plugin, contrato Pigeon y hosts nativos
-│   ├── pigeons/                 # Fuente del contrato
-│   ├── android/                 # Kotlin, JNI y radios Android
-│   └── ios/                     # Swift, ABI C y radios Apple
-├── crates/                      # Workspace Rust
-├── schema/                      # API, protocolo, sesión, store y telemetría
-├── vectors/                     # Vectores de conformidad y sesión
-├── tools/                       # Builds, contratos, cobertura y evidencia
-├── docs/                        # Diseño, seguimiento, pruebas y pendientes
-└── .github/workflows/           # Definición de CI
+├── app/                         # Flutter lab application
+│   ├── lib/core/sdk/             # Controller and NativeLabSdk adapter
+│   └── lib/features/laboratory/  # Usage and diagnostic screens
+├── packages/mesh_field_sdk/      # Flutter interface for products
+├── platforms/mesh_host/          # Plugin, Pigeon contract, and native hosts
+│   ├── pigeons/                 # Contract source
+│   ├── android/                 # Kotlin, JNI, and Android radios
+│   └── ios/                     # Swift, C ABI, and Apple radios
+├── crates/                      # Rust workspace
+├── schema/                      # API, protocol, session, store, and telemetry
+├── vectors/                     # Conformance and session vectors
+├── tools/                       # Builds, contracts, coverage, and evidence
+├── docs/                        # Design, tracking, tests, and open work
+└── .github/workflows/           # CI definition
 ```
 
-Los HTML de arquitectura en la raíz conservan la especificación y el plan de diseño. Una capacidad descrita allí puede ser una meta; su presencia en la especificación no demuestra que esté implementada.
+The architecture HTML files at the root preserve the specification and design plan. A capability described there may be a goal; its presence in the specification does not prove it is implemented.
 
-## 14. Pendientes y documentación de referencia
+## 14. Open work and reference documentation
 
-El cierre del plan mantiene abiertos, entre otros, estos trabajos:
+Plan completion still requires, among other work:
 
-- Campaña de tres teléfonos y múltiples saltos reales para texto, voz y GPS.
-- Recuperación sin Internet, cortes/reencuentro y reinicios medidos.
-- Segundo plano, pantalla bloqueada y consumo.
-- Pasarela a nube: despliegue, E2E real y extensión más allá de texto.
-- Sustitución de vecinos, selección física por objeto y presencia propagada.
-- Grupos físicos de 5/10/50 y Wi-Fi Aware entre iPhones compatibles.
-- Aislamiento al cambiar de grupo, membresía y liderazgo bajo cortes.
-- Diagnóstico/exportación, cobertura nativa y auditoría independiente de seguridad.
+- A three-phone campaign with actual multiple hops for text, voice, and GPS.
+- Measured offline recovery, interruptions/reconnection, and restarts.
+- Background operation, locked-screen behavior, and power use.
+- Cloud gateway deployment, actual E2E, and support beyond text.
+- Neighbor replacement, physical per-object selection, and propagated presence.
+- Physical groups of 5/10/50 and Wi-Fi Aware between compatible iPhones.
+- Isolation when changing groups, membership, and leadership under interruptions.
+- Diagnostics/export, native coverage, and an independent security audit.
 
-| Documento | Uso y vigencia |
+Some linked documents are in Spanish and retain historical context. Read their status alongside recent progress entries and current source code.
+
+| Document | Purpose and currency |
 |---|---|
-| [Progreso](docs/progress.md) | Registro de evidencia; priorizar entradas recientes |
-| [Huecos conocidos](docs/known-gaps.md) | Inventario técnico; cruzar estados históricos con progreso |
-| [Ejecutor durable](docs/relay-host-executor.md) | Custodia, relay y pendientes de hosts |
-| [Perfil Noise](schema/session/lab-v1.md) | Formato exacto y límites de la sesión implementada |
-| [SDK](packages/mesh_field_sdk/README.md) | Introducción a la fachada; algunas referencias de integración son históricas |
-| [Contrato de fundación](docs/foundation-contract.md) | Frontera diagnóstica F0 |
-| [Plan de cierre SDK](docs/sdk-closure-and-product-integration-plan.md) | Gates de producto y seguridad |
-| [Internet y malla](docs/hybrid-internet-mesh-plan.md) | Diseño híbrido; no es constancia de despliegue |
-| [Wi-Fi Aware mesh](docs/wifi-aware-mesh-50.md) | Diseño de grupos y topología acotada |
-| [Validación Aware](docs/wifi-aware-validation-plan.md) | Matriz y campaña de radio |
-| [Cobertura](docs/testing-coverage.md) | Alcance de mediciones y pruebas |
-| [Pruebas móviles históricas](docs/mobile-testing.md) | Evidencia/procedimientos F0; su apertura no describe las funciones actuales |
+| [Progress](docs/progress.md) | Evidence log; prioritize recent entries |
+| [Known gaps](docs/known-gaps.md) | Technical inventory; cross-check historical states against progress |
+| [Durable executor](docs/relay-host-executor.md) | Custody, relay, and outstanding host work |
+| [Noise profile](schema/session/lab-v1.md) | Exact format and limits of the implemented session |
+| [SDK](packages/mesh_field_sdk/README.md) | Interface introduction; some integration references are historical |
+| [Foundation contract](docs/foundation-contract.md) | F0 diagnostic boundary |
+| [SDK completion plan](docs/sdk-closure-and-product-integration-plan.md) | Product and security gates |
+| [Internet and mesh](docs/hybrid-internet-mesh-plan.md) | Hybrid design; not evidence of deployment |
+| [Wi-Fi Aware mesh](docs/wifi-aware-mesh-50.md) | Group design and bounded topology |
+| [Aware validation](docs/wifi-aware-validation-plan.md) | Radio matrix and campaign |
+| [Coverage](docs/testing-coverage.md) | Scope of measurements and tests |
+| [Historical mobile tests](docs/mobile-testing.md) | F0 evidence/procedures; its opening does not describe current capabilities |
 
-El código original de Mesh Lab se distribuye bajo Apache-2.0. La apertura del código no implica una release estable ni la publicación de paquetes en registros: el workspace Rust y los paquetes Flutter conservan deshabilitada esa publicación. Véanse [licencia y reconocimiento](#16-licencia-y-reconocimiento) y [material de terceros](THIRD_PARTY.md).
+Original Mesh Lab code is distributed under Apache-2.0. Making the source public does not imply a stable release or publication to package registries: registry publishing remains disabled for the Rust workspace and Flutter packages. See [license and attribution](#16-license-and-attribution) and [third-party material](THIRD_PARTY.md).
 
-## 15. Glosario
+## 15. Glossary
 
-| Término | Significado en el proyecto |
+| Term | Meaning in this project |
 |---|---|
-| Host | Código nativo Swift/Kotlin que posee recursos y ejecuta operaciones del sistema |
-| Peer o vecino | Dispositivo directamente observable/conectable por un enlace |
-| Miembro | Identidad admitida por la política certificada del grupo |
-| Roster | Conjunto certificado de miembros |
-| Época | Versión de autoridad/política utilizada para validar pertenencia |
-| Scope | Separación de datos y sesión de un grupo de producto |
-| Objeto | Unidad durable con manifest, contenido y audiencia |
-| Chunk | Fragmento acotado de un objeto |
-| Outbox | Cola persistente de contenido pendiente de entrega |
-| Custodia | Responsabilidad durable de conservar/reintentar un objeto o comprobante |
-| Receipt | Confirmación firmada y verificable del receptor |
-| ReceiptAck | Confirmación del origen sobre un receipt concreto |
-| Relay | Nodo que reenvía contenido o comprobantes entre vecinos |
-| ID lógico | Identificador de una acción de producto, incluso si usa varios objetos |
-| Noise XX | Protocolo de establecimiento de claves del enlace, completado aquí con AUTH |
-| Gate | Requisito de evidencia que debe cumplirse antes de declarar cierre |
+| Host | Native Swift/Kotlin code that owns resources and performs system operations |
+| Peer or neighbor | Device directly observable/reachable through a link |
+| Member | Identity admitted by the group's certified policy |
+| Roster | Certified set of members |
+| Epoch | Authority/policy version used to validate membership |
+| Scope | Data and session separation for a product group |
+| Object | Durable unit with a manifest, content, and audience |
+| Chunk | Bounded fragment of an object |
+| Outbox | Persistent queue of content awaiting delivery |
+| Custody | Durable responsibility for retaining/retrying an object or acknowledgment |
+| Receipt | Signed, verifiable acknowledgment from the receiver |
+| ReceiptAck | Origin acknowledgment of a specific receipt |
+| Relay | Node forwarding content or acknowledgments between neighbors |
+| Logical ID | Identifier of a product action, even when it uses multiple objects |
+| Noise XX | Link key establishment protocol, completed here with AUTH |
+| Gate | Evidence requirement that must be met before declaring completion |
 
+## 16. License and attribution
 
-## 16. Licencia y reconocimiento
+Original Mesh Lab code and documentation are available under the
+[Apache License 2.0](LICENSE). The project was created by
+[Francisco Murillo (Frazko)](https://github.com/Frazko); distribution attribution is recorded
+in [NOTICE](NOTICE). Third-party components retain their own
+licenses and notices, as described in [THIRD_PARTY.md](THIRD_PARTY.md).
 
-El código original y la documentación original de Mesh Lab se ofrecen bajo
-[Apache License 2.0](LICENSE). El proyecto fue creado por
-[Francisco Murillo (Frazko)](https://github.com/Frazko); la atribución de la distribución se recoge
-en [NOTICE](NOTICE). Los componentes de terceros conservan sus propias
-licencias y avisos, según [THIRD_PARTY.md](THIRD_PARTY.md).
+Apache-2.0 permits use, modification, and distribution, including within
+commercial or closed-source applications, subject to its conditions.
+When redistributing, retain the license and applicable notices, reproduce
+NOTICE attribution in one of the forms allowed by section 4, and
+identify modified files. The full LICENSE text determines the permissions
+and conditions; this summary neither expands nor replaces them.
 
-Apache-2.0 permite usar, modificar y distribuir el proyecto, incluso dentro de
-aplicaciones comerciales o de código cerrado, cumpliendo sus condiciones.
-Al redistribuir, conserva la licencia y los avisos aplicables, reproduce las
-atribuciones de NOTICE en una de las formas admitidas por la sección 4 e
-identifica los archivos modificados. El texto completo de LICENSE determina
-los permisos y condiciones; este resumen no los amplía ni sustituye.
+If Mesh Lab is useful to you, we appreciate a link to the official repository
+or a credit such as **“Powered by Mesh Lab — created by Francisco Murillo (Frazko)”**.
+This promotional credit is voluntary and adds no condition to Apache-2.0.
 
-Si Mesh Lab te resulta útil, agradeceremos que enlaces el repositorio oficial
-o incluyas un crédito como **«Powered by Mesh Lab — creado por Francisco Murillo (Frazko)»**. Esa
-mención promocional es voluntaria y no añade una condición a Apache-2.0.
-
-Los reportes reproducibles y las contribuciones son bienvenidos. Presenta el
-modelo del dispositivo, sistema operativo, versión del SDK y pasos de
-reproducción; evita adjuntar claves, contenido privado o identificadores
-personales en los informes públicos.
+Reproducible reports and contributions are welcome. Include the device model,
+operating system, SDK version, and reproduction steps; avoid attaching keys,
+private content, or personal identifiers to public reports.

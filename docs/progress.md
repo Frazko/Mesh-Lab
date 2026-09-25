@@ -1993,3 +1993,18 @@ No se afirma borrado físico de cachés remotas ni auditoría integral de seguri
 No se creó una release binaria ni se publicaron paquetes en registros. Las
 campañas físicas, cobertura nativa y demás gates técnicos siguen pendientes
 según el plan existente. Commit de apertura tras saneamiento: 1fd1950.
+
+## 2026-09-25 — README translated to English
+
+Plan Malla: 81% global estimated, unchanged. README translation block: 100%
+(full 16-section translation 60%, technical/link checks 20%, Mermaid visual
+review 10%, selective commit and push 10%).
+
+README.md was translated from Spanish to English while preserving its complete
+technical scope, Apache-2.0 terms, Convoy Offroad attribution, source links,
+commands, limits, code identifiers, and the three architecture/relay diagrams.
+The exact Spanish UI labels remain in parentheses where they are needed to
+operate the current app. Validation passed for all 16 anchors, local links,
+external/source links, shell blocks, inline technical values, Mermaid topology,
+and `git diff --check`. The three Mermaid charts rendered successfully with
+the temporary local review tool. No functional gates were changed or claimed.
