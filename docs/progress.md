@@ -1938,3 +1938,29 @@ revisión: /tmp/mesh-diagram-review/architecture-1.png y architecture-2.png.
 Se verificaron enlaces locales y ausencia del nombre de producto retirado del
 README. No se modificaron dependencias del proyecto, código, licencia ni
 visibilidad. No se ejecutaron pruebas físicas para este cambio de presentación.
+
+
+## 2026-09-25 — Apache-2.0 y preparación final de publicación
+
+Plan Malla: 81% global estimado; los gates físicos no cambian. Apertura: 90%
+(documentación/metadatos 40%, revisión y respaldo 30%, autoría confirmada y
+limpieza preparada 20%; publicación verificada 10% pendiente).
+
+El titular confirmado es Francisco Murillo y NOTICE usa exactamente
+“Created by Francisco Murillo (Frazko).”. El README declara Apache-2.0,
+reconocimiento promocional voluntario y Convoy Offroad (theconvoyapp.com) como
+aplicación que usa la tecnología, según información del titular. Se conservan
+las licencias de terceros; LICENSE/NOTICE/THIRD_PARTY.md acompañan también a
+los paquetes Flutter. Los 13 crates heredan Apache-2.0 en Cargo y el podspec
+reconoce esa licencia. No se habilita publicación en registros de paquetes.
+
+Se respaldó privadamente el historial y las modificaciones locales antes de
+la anonimización autorizada. Cuatro identificadores de instalación/incidente
+del reporte iOS se sustituyen por REDACTED; se conserva el diagnóstico técnico.
+La revisión previa recorrió 516 blobs sin hallar los patrones de credenciales
+comprobados. Eso no representa una auditoría completa de seguridad.
+Validación documental: enlaces e índice resueltos, atribución definitiva y
+copias idénticas de avisos en los paquetes. Cargo metadata --locked comprueba
+la licencia de todos los miembros; no se ejecutan builds por estos cambios
+de licencia/documentación. Las notas locales ajenas a esta entrega permanecen
+sin incorporar al commit.

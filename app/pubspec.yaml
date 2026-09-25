@@ -1,6 +1,7 @@
 name: mesh_lab
 description: Laboratorio de conectividad mesh para iOS y Android.
 publish_to: none
+repository: https://github.com/Frazko/Mesh-Lab
 version: 0.1.0+10007
 environment:
   sdk: ^3.13.2

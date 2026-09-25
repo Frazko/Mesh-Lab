@@ -1,8 +1,10 @@
 # Mesh Lab
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 Laboratorio móvil y núcleo de comunicación cercana para intercambiar **texto, ubicación y notas de voz entre teléfonos**, mediante enlaces autenticados y almacenamiento durable, sin exigir una conexión a Internet para el transporte local.
 
-El proyecto reúne una aplicación Flutter de pruebas, hosts nativos Android/iOS, un motor Rust compartido y una fachada Flutter reutilizable: **Mesh Field SDK**. Otras aplicaciones pueden consumir esa infraestructura mediante el SDK.
+El proyecto reúne una aplicación Flutter de pruebas, hosts nativos Android/iOS, un motor Rust compartido y una fachada Flutter reutilizable: **Mesh Field SDK**. Otras aplicaciones pueden consumir esa infraestructura mediante el SDK. Una de las aplicaciones que utiliza esta tecnología es **[Convoy Offroad](https://theconvoyapp.com)**.
 
 **Estado documental: 25 de septiembre de 2026. Avance global estimado del plan Malla: 81%; Wi-Fi Aware: 90%; comunicación: 78%.** Son estimaciones del seguimiento, no porcentajes de cobertura de pruebas ni certificaciones de funcionamiento. Esta documentación no modifica esos gates. La evidencia física y los pendientes están en [docs/progress.md](docs/progress.md), especialmente en sus secciones recientes.
 
@@ -23,6 +25,7 @@ El proyecto reúne una aplicación Flutter de pruebas, hosts nativos Android/iOS
 13. [Mapa del repositorio](#13-mapa-del-repositorio)
 14. [Pendientes y documentación de referencia](#14-pendientes-y-documentación-de-referencia)
 15. [Glosario](#15-glosario)
+16. [Licencia y reconocimiento](#16-licencia-y-reconocimiento)
 
 ## 1. Qué es y qué problema resuelve
 
@@ -684,7 +687,7 @@ El cierre del plan mantiene abiertos, entre otros, estos trabajos:
 | [Cobertura](docs/testing-coverage.md) | Alcance de mediciones y pruebas |
 | [Pruebas móviles históricas](docs/mobile-testing.md) | Evidencia/procedimientos F0; su apertura no describe las funciones actuales |
 
-El workspace Rust y los paquetes Flutter se mantienen sin publicación en registros. Este README no declara una licencia global nueva ni una release de distribución; las licencias específicas presentes deben revisarse antes de redistribuir.
+El código original de Mesh Lab se distribuye bajo Apache-2.0. La apertura del código no implica una release estable ni la publicación de paquetes en registros: el workspace Rust y los paquetes Flutter conservan deshabilitada esa publicación. Véanse [licencia y reconocimiento](#16-licencia-y-reconocimiento) y [material de terceros](THIRD_PARTY.md).
 
 ## 15. Glosario
 
@@ -706,3 +709,28 @@ El workspace Rust y los paquetes Flutter se mantienen sin publicación en regist
 | ID lógico | Identificador de una acción de producto, incluso si usa varios objetos |
 | Noise XX | Protocolo de establecimiento de claves del enlace, completado aquí con AUTH |
 | Gate | Requisito de evidencia que debe cumplirse antes de declarar cierre |
+
+
+## 16. Licencia y reconocimiento
+
+El código original y la documentación original de Mesh Lab se ofrecen bajo
+[Apache License 2.0](LICENSE). El proyecto fue creado por
+[Francisco Murillo (Frazko)](https://github.com/Frazko); la atribución de la distribución se recoge
+en [NOTICE](NOTICE). Los componentes de terceros conservan sus propias
+licencias y avisos, según [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Apache-2.0 permite usar, modificar y distribuir el proyecto, incluso dentro de
+aplicaciones comerciales o de código cerrado, cumpliendo sus condiciones.
+Al redistribuir, conserva la licencia y los avisos aplicables, reproduce las
+atribuciones de NOTICE en una de las formas admitidas por la sección 4 e
+identifica los archivos modificados. El texto completo de LICENSE determina
+los permisos y condiciones; este resumen no los amplía ni sustituye.
+
+Si Mesh Lab te resulta útil, agradeceremos que enlaces el repositorio oficial
+o incluyas un crédito como **«Powered by Mesh Lab — creado por Francisco Murillo (Frazko)»**. Esa
+mención promocional es voluntaria y no añade una condición a Apache-2.0.
+
+Los reportes reproducibles y las contribuciones son bienvenidos. Presenta el
+modelo del dispositivo, sistema operativo, versión del SDK y pasos de
+reproducción; evita adjuntar claves, contenido privado o identificadores
+personales en los informes públicos.

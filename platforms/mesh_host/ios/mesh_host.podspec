@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
 Mesh Lab native diagnostic host.
                        DESC
   s.homepage         = 'https://github.com/Frazko/Mesh-Lab'
-  s.license          = { :file => '../LICENSE' }
+  s.license          = { :type => 'Apache-2.0', :file => '../LICENSE' }
   s.author           = 'Mesh Lab'
   s.source           = { :path => '.' }
   s.source_files = 'mesh_host/Sources/mesh_host/**/*'

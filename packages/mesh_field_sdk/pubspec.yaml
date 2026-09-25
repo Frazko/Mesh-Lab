@@ -2,6 +2,7 @@ name: mesh_field_sdk
 description: Cross-product Flutter facade for nearby Mesh field sessions.
 version: 0.2.5
 publish_to: none
+repository: https://github.com/Frazko/Mesh-Lab
 environment:
   sdk: ^3.13.2
   flutter: '>=3.47.2'
