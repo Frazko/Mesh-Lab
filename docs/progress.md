@@ -2008,3 +2008,17 @@ operate the current app. Validation passed for all 16 anchors, local links,
 external/source links, shell blocks, inline technical values, Mermaid topology,
 and `git diff --check`. The three Mermaid charts rendered successfully with
 the temporary local review tool. No functional gates were changed or claimed.
+
+## 2026-09-25 — All README files translated to English
+
+Plan Malla: 81% global estimated, unchanged. README translation block: 100%
+(repository-wide README inventory 20%, app/SDK/host translations 60%, marker
+and diff validation 10%, selective commit and push 10%).
+
+Translated the remaining Spanish README content in `app/README.md`,
+`packages/mesh_field_sdk/README.md`, and `platforms/mesh_host/README.md`.
+`schema/wire/README.md`, `vectors/session/README.md`, and the iOS asset README
+were already in English. The root README retains exact Spanish UI labels in
+parentheses where they identify controls that are still Spanish in the app.
+No Spanish prose remains in the repository README files, and `git diff --check`
+passes. Functional gates and source behavior were not changed.

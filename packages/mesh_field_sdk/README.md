@@ -1,9 +1,8 @@
 # Mesh Field SDK
 
-Fachada Flutter reutilizable para una sesión Mesh cercana sin internet. Oculta
-el bridge nativo, Bluetooth LE, Wi‑Fi Aware, IP, credenciales y frames
-cifrados. Una aplicación consume únicamente estado de sesión y operaciones de
-producto.
+Reusable Flutter interface for a nearby Mesh session without Internet. It hides
+the native bridge, Bluetooth LE, Wi-Fi Aware, IP, credentials, and encrypted
+frames. An application consumes only session state and product operations.
 
 ```dart
 final mesh = FieldMeshClient();
@@ -12,47 +11,48 @@ await mesh.prepareIdentity();
 final session = await mesh.connect();
 
 if (session.secure) {
-  final delivery = await mesh.sendText('Convoy listo');
-  // Conserva delivery?.logicalId para refrescar el estado después.
+  final delivery = await mesh.sendText('Convoy ready');
+  // Keep delivery?.logicalId to refresh the state later.
   if (delivery?.complete == true) {
-    // Todos los destinatarios certificados confirmaron la entrega.
+    // All certified recipients confirmed delivery.
   }
 }
 
 mesh.watch().listen((state) {
-  // Proyectar state.connection y radios en la interfaz del producto.
+  // Project state.connection and radio state into the product UI.
 });
 ```
 
-`MeshHostGateway` es el adaptador actual iOS/Android sobre `mesh_host`.
-Productos pueden sustituir `FieldMeshGateway` por un fake de pruebas sin
-inicializar Flutter channels ni radios físicos.
+`MeshHostGateway` is the current iOS/Android adapter over `mesh_host`.
+Products can replace `FieldMeshGateway` with a test fake without initializing
+Flutter channels or physical radios.
 
-## Alcance actual
+## Current scope
 
-La versión inicial expone identidad, estado del grupo, Bluetooth, Wi‑Fi Aware,
-voz, conexión, texto durable, ubicación puntual y evidencia agregada de su
-entrega. `sendText` y `sendLocation` devuelven un ID lógico y `delivery(id)`
-refresca `queued`, `partial`, `delivered` o `expired`. `FieldLocation` lleva
-coordenadas, precisión, hora y orientación opcional del vehículo en grados;
-una orientación nula significa que el teléfono no pudo obtenerla con confianza.
-`watchIncoming` entrega texto o ubicación recibida para una interfaz de producto.
+The initial version exposes identity, group state, Bluetooth, Wi-Fi Aware,
+voice, connection, durable text, one-shot location, and aggregate delivery
+evidence. `sendText` and `sendLocation` return a logical ID, and `delivery(id)`
+refreshes `queued`, `partial`, `delivered`, or `expired`. `FieldLocation` carries
+coordinates, accuracy, time, and an optional vehicle heading in degrees; a null
+heading means the phone could not obtain it reliably. `watchIncoming` provides
+received text or location to a product interface.
 
-Para una integración que debe atribuir y reconciliar acciones, el cliente
-implementa las capacidades opcionales `FieldMeshVerifiedIncomingSource` y
-`FieldMeshVerifiedIncomingVoiceSource`. Sus colas FIFO nativas contienen sólo
-objetos durables verificados tras todos los chunks y el receipt local. La voz
-incluye origen de roster, ID de objeto, ID lógico, instante, duración y un
-contexto de producto de hasta 512 bytes; `FieldMeshVoiceContextSender` lo sella
-junto al audio. `playVerifiedVoice(objectId)` reproduce el archivo privado
-correspondiente sin entregar bytes ni una ruta al producto. El SDK vuelve a validar formato y
-descarta evidencia malformada. El ID lógico de una aplicación viaja dentro del
-payload cifrado, antes de que una aplicación pueda correlacionar una acción
-entrante con su propio outbox.
-No expone objetos cifrados, receipts, identidades de destinatarios, rutas, IP
-ni claves. La presencia global y el rastreo continuo en segundo plano siguen
-fuera del SDK porque requieren una política de producto y validación física.
+For an integration that must attribute and reconcile actions, the client
+implements the optional `FieldMeshVerifiedIncomingSource` and
+`FieldMeshVerifiedIncomingVoiceSource` capabilities. Their native FIFO queues
+contain only durable objects verified after all chunks and the local receipt.
+Voice includes roster origin, object ID, logical ID, timestamp, duration, and
+up to 512 bytes of product context; `FieldMeshVoiceContextSender` seals it with
+the audio. `playVerifiedVoice(objectId)` plays the corresponding private file
+without giving the product audio bytes or a path. The SDK validates the format
+again and discards malformed evidence. An application's logical ID travels
+inside the encrypted payload before the application correlates an incoming
+action with its own outbox.
+It does not expose encrypted objects, receipts, recipient identities, paths,
+IP addresses, or keys. Global presence and continuous background tracking
+remain outside the SDK because they require product policy and physical
+validation.
 
-Mesh Lab es el consumidor de referencia y el harness físico. Convoy será la
-primera integración de producto: adapta miembros a vehículos, posiciones al
-mapa y mensajes a su chat, sin conocer radios ni la topología.
+Mesh Lab is the reference consumer and physical harness. Convoy will be the
+first product integration: it maps members to vehicles, positions to the map,
+and messages to its chat without knowing the radios or topology.
