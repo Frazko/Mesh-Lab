@@ -1964,3 +1964,32 @@ copias idénticas de avisos en los paquetes. Cargo metadata --locked comprueba
 la licencia de todos los miembros; no se ejecutan builds por estos cambios
 de licencia/documentación. Las notas locales ajenas a esta entrega permanecen
 sin incorporar al commit.
+
+
+## 2026-09-25 — Publicación open source completada
+
+Plan Malla: 81% global estimado, sin cambios de gates funcionales. Apertura
+Apache-2.0: 100% (documentación/metadatos 40%, revisión/respaldo 30%, autoría
+y anonimización 20%, publicación y verificación anónima 10%).
+
+https://github.com/Frazko/Mesh-Lab es PUBLIC y GitHub detecta Apache-2.0.
+La API y los archivos raw se verificaron sin autenticación. NOTICE contiene
+“Created by Francisco Murillo (Frazko).” y el README identifica a Convoy Offroad
+con enlace https://theconvoyapp.com, conforme a lo autorizado por el titular.
+
+Se reescribió el historial publicado con sustituciones literales de cuatro
+identificadores de instalación/incidente del reporte iOS. Se inspeccionaron
+536 blobs del historial saneado y los demás objetos alcanzables sin encontrar
+esos valores originales. Las referencias internas del editor se excluyeron
+de la copia destinada a publicación. La actualización remota usó un lease
+con el hash anterior esperado; se sincronizaron las ramas locales conservando
+las modificaciones no relacionadas de docs/progress.md. El árbol de la entrega
+actual conservó su contenido ya anonimizado.
+
+Existe un respaldo local privado del historial original y de las modificaciones
+previas fuera del repositorio público. Los hashes históricos cambiaron; quienes
+conserven clones anteriores deben sincronizarlos con el historial publicado.
+No se afirma borrado físico de cachés remotas ni auditoría integral de seguridad.
+No se creó una release binaria ni se publicaron paquetes en registros. Las
+campañas físicas, cobertura nativa y demás gates técnicos siguen pendientes
+según el plan existente. Commit de apertura tras saneamiento: 1fd1950.
