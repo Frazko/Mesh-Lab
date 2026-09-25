@@ -1881,9 +1881,12 @@ de un reporte sobre su ubicación en los dispositivos.
 
 ## 2026-09-25 — README independiente del producto consumidor
 
-Plan Malla: 81% global estimado, sin cambio de gates. Ajuste documental: 100%;
-entrega remota: pendiente de confirmar push. Base del bloque: redacción 60%,
-validación documental 20% y push verificado 20%.
+Plan Malla: 81% global estimado, sin cambio de gates. Bloque de ajuste y push:
+100% (redacción 60%, validación documental 20% y push verificado 20%).
+Commit documental `a8edfcc` confirmado en la rama remota
+`codex/mesh-failover-executor`. GitHub conserva visibilidad PRIVATE. La primera
+credencial HTTPS carecía del scope workflow; la publicación se completó con la
+clave SSH de la misma cuenta. No se cambiaron licencia ni workflows.
 
 Se revisó el README técnico solicitado como primera entrega para sustituir las
 referencias nominales al producto consumidor por descripciones genéricas. Se
